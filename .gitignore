@@ -1,0 +1,8 @@
+.venv
+.idea
+__pycache__/
+*.pyc
+.vscode
+mqtt_broker/__pycache__/
+tests/__pycache__/
+mqtt_broker.egg-info/

@@ -1,0 +1,588 @@
+"""
+MQTT Broker Implementation
+Main server handling client connections and message routing.
+"""
+
+import asyncio
+import logging
+import time
+from typing import Dict, Optional, Set
+from dataclasses import dataclass
+
+from .protocol import (
+    PacketType, ConnectReturnCode, ProtocolError, MalformedPacketError,
+    parse_fixed_header, validate_packet_flags, parse_connect, parse_publish,
+    parse_subscribe, parse_unsubscribe, parse_packet_id,
+    build_connack, build_publish, build_puback, build_pubrec, build_pubrel, build_pubcomp,
+    build_suback, build_unsuback, build_pingresp,
+    decode_remaining_length, encode_remaining_length,
+    topic_matches_filter as protocol_topic_matches
+)
+from .session import Session, SessionManager, WillMessage, PendingMessage
+from .topics import TopicManager, topic_matches_filter
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ClientConnection:
+    """Represents an active client connection."""
+    reader: asyncio.StreamReader
+    writer: asyncio.StreamWriter
+    client_id: Optional[str] = None
+    session: Optional[Session] = None
+    connected: bool = False
+    keep_alive: int = 0
+    last_activity: float = 0
+    will_message: Optional[WillMessage] = None
+    clean_session: bool = True
+    address: str = ""
+
+
+class MQTTBroker:
+    """
+    MQTT 3.1.1 Broker implementation.
+    Handles client connections, message routing, and protocol compliance.
+    """
+    
+    def __init__(self, host: str = "0.0.0.0", port: int = 1883, max_qos: int = 2):
+        self.host = host
+        self.port = port
+        self.max_qos = max_qos
+        
+        self.session_manager = SessionManager()
+        self.topic_manager = TopicManager()
+        
+        # Active client connections by client_id
+        self.clients: Dict[str, ClientConnection] = {}
+        
+        # Server state
+        self.server: Optional[asyncio.Server] = None
+        self.running = False
+        
+        # Connection timeout for CONNECT packet (seconds)
+        self.connect_timeout = 30
+    
+    async def start(self) -> None:
+        """Start the MQTT broker."""
+        self.running = True
+        self.server = await asyncio.start_server(
+            self._handle_client,
+            self.host,
+            self.port
+        )
+        
+        addr = self.server.sockets[0].getsockname()
+        logger.info(f"MQTT Broker started on {addr[0]}:{addr[1]}")
+        
+        async with self.server:
+            await self.server.serve_forever()
+    
+    async def stop(self) -> None:
+        """Stop the MQTT broker."""
+        self.running = False
+        if self.server:
+            self.server.close()
+            await self.server.wait_closed()
+        
+        # Close all client connections
+        for client in list(self.clients.values()):
+            await self._close_connection(client, publish_will=False)
+        
+        logger.info("MQTT Broker stopped")
+    
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Handle a new client connection."""
+        addr = writer.get_extra_info('peername')
+        address_str = f"{addr[0]}:{addr[1]}" if addr else "unknown"
+        
+        client = ClientConnection(
+            reader=reader,
+            writer=writer,
+            address=address_str,
+            last_activity=time.time()
+        )
+        
+        logger.info(f"New connection from {address_str}")
+        
+        try:
+            # Wait for CONNECT packet with timeout
+            first_packet = await asyncio.wait_for(
+                self._read_packet(client),
+                timeout=self.connect_timeout
+            )
+            
+            if first_packet is None:
+                logger.warning(f"Connection closed before CONNECT from {address_str}")
+                return
+            
+            packet_type, flags, payload = first_packet
+            
+            # First packet MUST be CONNECT
+            if packet_type != PacketType.CONNECT:
+                logger.warning(f"First packet not CONNECT from {address_str}")
+                await self._close_connection(client)
+                return
+            
+            # Process CONNECT
+            if not await self._handle_connect(client, flags, payload):
+                return
+            
+            # Start keep-alive monitoring
+            keepalive_task = None
+            if client.keep_alive > 0:
+                keepalive_task = asyncio.create_task(
+                    self._monitor_keepalive(client)
+                )
+            
+            # Main packet processing loop
+            try:
+                while self.running and client.connected:
+                    packet = await self._read_packet(client)
+                    
+                    if packet is None:
+                        # Connection closed
+                        break
+                    
+                    packet_type, flags, payload = packet
+                    client.last_activity = time.time()
+                    
+                    # Second CONNECT is protocol error
+                    if packet_type == PacketType.CONNECT:
+                        logger.warning(f"Second CONNECT from {client.client_id}")
+                        await self._close_connection(client)
+                        return
+                    
+                    await self._handle_packet(client, packet_type, flags, payload)
+            finally:
+                if keepalive_task:
+                    keepalive_task.cancel()
+                    try:
+                        await keepalive_task
+                    except asyncio.CancelledError:
+                        pass
+        
+        except asyncio.TimeoutError:
+            logger.warning(f"CONNECT timeout from {address_str}")
+        except ProtocolError as e:
+            logger.warning(f"Protocol error from {address_str}: {e}")
+        except Exception as e:
+            logger.error(f"Error handling client {address_str}: {e}", exc_info=True)
+        finally:
+            await self._close_connection(client, publish_will=client.connected)
+    
+    async def _read_packet(self, client: ClientConnection) -> Optional[tuple]:
+        """
+        Read a complete MQTT packet from client.
+        Returns (packet_type, flags, payload) or None on connection close.
+        """
+        try:
+            # Read fixed header first byte
+            first_byte = await client.reader.read(1)
+            if not first_byte:
+                return None
+            
+            packet_type = PacketType(first_byte[0] >> 4)
+            flags = first_byte[0] & 0x0F
+            
+            # Read remaining length
+            remaining_length = 0
+            multiplier = 1
+            for _ in range(4):
+                byte = await client.reader.read(1)
+                if not byte:
+                    return None
+                remaining_length += (byte[0] & 0x7F) * multiplier
+                multiplier *= 128
+                if (byte[0] & 0x80) == 0:
+                    break
+            else:
+                raise MalformedPacketError("Remaining length exceeds 4 bytes")
+            
+            # Read payload
+            payload = b""
+            if remaining_length > 0:
+                payload = await client.reader.readexactly(remaining_length)
+            
+            # Validate flags
+            validate_packet_flags(packet_type, flags)
+            
+            return packet_type, flags, payload
+        
+        except asyncio.IncompleteReadError:
+            return None
+        except ConnectionResetError:
+            return None
+    
+    async def _handle_connect(self, client: ClientConnection, flags: int, payload: bytes) -> bool:
+        """
+        Handle CONNECT packet.
+        Returns True if connection was accepted, False otherwise.
+        """
+        try:
+            connect = parse_connect(payload)
+        except ProtocolError as e:
+            logger.warning(f"Invalid CONNECT from {client.address}: {e}")
+            # Protocol error: close without CONNACK
+            await self._close_connection(client)
+            return False
+        
+        client_id = connect.client_id
+        
+        # Empty client ID handling
+        if not client_id:
+            if not connect.flags.clean_session:
+                # Empty client ID with clean_session=0 is not allowed
+                await self._send_connack(client, False, ConnectReturnCode.IDENTIFIER_REJECTED)
+                await self._close_connection(client)
+                return False
+            # Generate unique client ID for empty ID with clean_session=1
+            client_id = f"auto_{id(client)}_{int(time.time() * 1000)}"
+        
+        # Check if client ID is already connected
+        if client_id in self.clients:
+            # Disconnect existing client
+            existing = self.clients[client_id]
+            logger.info(f"Disconnecting existing client {client_id} for new connection")
+            await self._close_connection(existing, publish_will=True)
+        
+        # Get or create session
+        session, session_present = self.session_manager.get_or_create_session(
+            client_id, connect.flags.clean_session
+        )
+        
+        # Set up client connection
+        client.client_id = client_id
+        client.session = session
+        client.keep_alive = connect.keep_alive
+        client.clean_session = connect.flags.clean_session
+        client.connected = True
+        
+        # Set up will message
+        if connect.flags.will_flag:
+            # When will_flag is True, will_topic and will_message are guaranteed to be present
+            assert connect.will_topic is not None
+            assert connect.will_message is not None
+            client.will_message = WillMessage(
+                topic=connect.will_topic,
+                payload=connect.will_message,
+                qos=connect.flags.will_qos,
+                retain=connect.flags.will_retain
+            )
+        
+        # Register client
+        self.clients[client_id] = client
+        
+        # Send CONNACK
+        # Session present is only true if clean_session=0 and session existed
+        actual_session_present = session_present and not connect.flags.clean_session
+        await self._send_connack(client, actual_session_present, ConnectReturnCode.ACCEPTED)
+        
+        logger.info(f"Client {client_id} connected (clean_session={connect.flags.clean_session}, session_present={actual_session_present})")
+        
+        # Send any pending messages from previous session
+        if actual_session_present:
+            await self._resend_pending_messages(client)
+        
+        return True
+    
+    async def _send_connack(self, client: ClientConnection, session_present: bool, 
+                           return_code: ConnectReturnCode) -> None:
+        """Send CONNACK packet."""
+        packet = build_connack(session_present, return_code)
+        await self._send_packet(client, packet)
+        
+        if return_code != ConnectReturnCode.ACCEPTED:
+            # Close connection after sending error CONNACK
+            await self._close_connection(client, publish_will=False)
+    
+    async def _handle_packet(self, client: ClientConnection, packet_type: PacketType, 
+                            flags: int, payload: bytes) -> None:
+        """Handle incoming packet after CONNECT."""
+        handlers = {
+            PacketType.PUBLISH: self._handle_publish,
+            PacketType.PUBACK: self._handle_puback,
+            PacketType.PUBREC: self._handle_pubrec,
+            PacketType.PUBREL: self._handle_pubrel,
+            PacketType.PUBCOMP: self._handle_pubcomp,
+            PacketType.SUBSCRIBE: self._handle_subscribe,
+            PacketType.UNSUBSCRIBE: self._handle_unsubscribe,
+            PacketType.PINGREQ: self._handle_pingreq,
+            PacketType.DISCONNECT: self._handle_disconnect,
+        }
+        
+        handler = handlers.get(packet_type)
+        if handler:
+            await handler(client, flags, payload)
+        else:
+            logger.warning(f"Unhandled packet type {packet_type} from {client.client_id}")
+    
+    async def _handle_publish(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle PUBLISH packet."""
+        try:
+            publish = parse_publish(flags, payload)
+        except ProtocolError as e:
+            logger.warning(f"Invalid PUBLISH from {client.client_id}: {e}")
+            await self._close_connection(client)
+            return
+        
+        logger.debug(f"PUBLISH from {client.client_id}: topic={publish.topic}, qos={publish.qos}, retain={publish.retain}")
+        
+        # Handle retained message
+        if publish.retain:
+            self.topic_manager.set_retained_message(
+                publish.topic, publish.payload, publish.qos
+            )
+        
+        # Send acknowledgment based on QoS
+        if publish.qos == 1:
+            # packet_id is always present for QoS > 0
+            assert publish.packet_id is not None
+            await self._send_packet(client, build_puback(publish.packet_id))
+        elif publish.qos == 2:
+            # packet_id is always present for QoS > 0
+            assert publish.packet_id is not None
+            assert client.session is not None
+            # Store for duplicate detection
+            client.session.pending_incoming_qos2.add(publish.packet_id)
+            await self._send_packet(client, build_pubrec(publish.packet_id))
+            return  # Don't forward yet, wait for PUBREL
+        
+        # Forward to subscribers (QoS 0 and 1, or after PUBREL for QoS 2)
+        await self._forward_publish(publish.topic, publish.payload, publish.qos, publish.retain)
+    
+    async def _handle_puback(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle PUBACK packet (QoS 1 acknowledgment)."""
+        packet_id = parse_packet_id(payload)
+        
+        assert client.session is not None
+        if packet_id in client.session.pending_outgoing:
+            del client.session.pending_outgoing[packet_id]
+            logger.debug(f"PUBACK received for packet {packet_id} from {client.client_id}")
+        else:
+            logger.warning(f"Unexpected PUBACK for packet {packet_id} from {client.client_id}")
+    
+    async def _handle_pubrec(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle PUBREC packet (QoS 2 step 2)."""
+        packet_id = parse_packet_id(payload)
+        
+        assert client.session is not None
+        if packet_id in client.session.pending_outgoing:
+            client.session.pending_outgoing[packet_id].state = "pubrec_received"
+            await self._send_packet(client, build_pubrel(packet_id))
+            logger.debug(f"PUBREC received, PUBREL sent for packet {packet_id}")
+        else:
+            logger.warning(f"Unexpected PUBREC for packet {packet_id} from {client.client_id}")
+    
+    async def _handle_pubrel(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle PUBREL packet (QoS 2 step 3)."""
+        packet_id = parse_packet_id(payload)
+        
+        assert client.session is not None
+        if packet_id in client.session.pending_incoming_qos2:
+            client.session.pending_incoming_qos2.discard(packet_id)
+            await self._send_packet(client, build_pubcomp(packet_id))
+            logger.debug(f"PUBREL received, PUBCOMP sent for packet {packet_id}")
+        else:
+            # Still send PUBCOMP per spec
+            await self._send_packet(client, build_pubcomp(packet_id))
+            logger.warning(f"PUBREL for unknown packet {packet_id} from {client.client_id}")
+    
+    async def _handle_pubcomp(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle PUBCOMP packet (QoS 2 complete)."""
+        packet_id = parse_packet_id(payload)
+        
+        assert client.session is not None
+        if packet_id in client.session.pending_outgoing:
+            del client.session.pending_outgoing[packet_id]
+            logger.debug(f"PUBCOMP received for packet {packet_id} from {client.client_id}")
+        else:
+            logger.warning(f"Unexpected PUBCOMP for packet {packet_id} from {client.client_id}")
+    
+    async def _handle_subscribe(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle SUBSCRIBE packet."""
+        try:
+            subscribe = parse_subscribe(payload)
+        except ProtocolError as e:
+            logger.warning(f"Invalid SUBSCRIBE from {client.client_id}: {e}")
+            await self._close_connection(client)
+            return
+        
+        return_codes = []
+        
+        assert client.session is not None
+        for topic_filter, requested_qos in subscribe.topics:
+            # Grant QoS (limited by broker's max QoS)
+            granted_qos = min(requested_qos, self.max_qos)
+            
+            # Add subscription
+            client.session.add_subscription(topic_filter, granted_qos)
+            return_codes.append(granted_qos)
+            
+            logger.debug(f"Client {client.client_id} subscribed to {topic_filter} with QoS {granted_qos}")
+            
+            # Send retained messages for new subscription
+            retained = self.topic_manager.get_matching_retained_messages(
+                topic_filter, topic_matches_filter
+            )
+            for msg in retained:
+                # Use minimum of message QoS and granted QoS
+                effective_qos = min(msg.qos, granted_qos)
+                await self._send_publish(
+                    client, msg.topic, msg.payload, effective_qos, retain=True
+                )
+        
+        # Send SUBACK
+        await self._send_packet(client, build_suback(subscribe.packet_id, return_codes))
+    
+    async def _handle_unsubscribe(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle UNSUBSCRIBE packet."""
+        try:
+            unsubscribe = parse_unsubscribe(payload)
+        except ProtocolError as e:
+            logger.warning(f"Invalid UNSUBSCRIBE from {client.client_id}: {e}")
+            await self._close_connection(client)
+            return
+        
+        assert client.session is not None
+        for topic_filter in unsubscribe.topics:
+            client.session.remove_subscription(topic_filter)
+            logger.debug(f"Client {client.client_id} unsubscribed from {topic_filter}")
+        
+        # Send UNSUBACK
+        await self._send_packet(client, build_unsuback(unsubscribe.packet_id))
+    
+    async def _handle_pingreq(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle PINGREQ packet."""
+        await self._send_packet(client, build_pingresp())
+        logger.debug(f"PINGRESP sent to {client.client_id}")
+    
+    async def _handle_disconnect(self, client: ClientConnection, flags: int, payload: bytes) -> None:
+        """Handle DISCONNECT packet."""
+        logger.info(f"Client {client.client_id} sent DISCONNECT")
+        # Clear will message (don't publish on clean disconnect)
+        client.will_message = None
+        client.connected = False
+    
+    async def _forward_publish(self, topic: str, payload: bytes, qos: int, retain: bool) -> None:
+        """Forward a published message to all matching subscribers."""
+        for client_id, client in list(self.clients.items()):
+            if not client.connected or not client.session:
+                continue
+            
+            # Check if any subscription matches
+            matching_qos = client.session.get_matching_qos(topic, topic_matches_filter)
+            if matching_qos is not None:
+                # Use minimum of publish QoS and subscription QoS
+                effective_qos = min(qos, matching_qos)
+                await self._send_publish(
+                    client, topic, payload, effective_qos, retain=False
+                )
+    
+    async def _send_publish(self, client: ClientConnection, topic: str, payload: bytes,
+                           qos: int, retain: bool = False, dup: bool = False,
+                           packet_id: Optional[int] = None) -> None:
+        """Send PUBLISH packet to client."""
+        if qos > 0:
+            assert client.session is not None
+            if packet_id is None:
+                packet_id = client.session.get_next_packet_id()
+            
+            # Store for potential retransmission
+            client.session.pending_outgoing[packet_id] = PendingMessage(
+                packet_id=packet_id,
+                topic=topic,
+                payload=payload,
+                qos=qos,
+                retain=retain,
+                timestamp=time.time()
+            )
+        
+        packet = build_publish(topic, payload, qos, retain, dup, packet_id)
+        await self._send_packet(client, packet)
+    
+    async def _send_packet(self, client: ClientConnection, packet: bytes) -> None:
+        """Send a packet to client."""
+        try:
+            client.writer.write(packet)
+            await client.writer.drain()
+        except (ConnectionResetError, BrokenPipeError) as e:
+            logger.warning(f"Failed to send packet to {client.client_id}: {e}")
+            client.connected = False
+    
+    async def _resend_pending_messages(self, client: ClientConnection) -> None:
+        """Resend pending messages from previous session."""
+        assert client.session is not None
+        for packet_id, pending in list(client.session.pending_outgoing.items()):
+            pending.retry_count += 1
+            
+            if pending.state == "pubrec_received":
+                # Was waiting for PUBCOMP, resend PUBREL
+                await self._send_packet(client, build_pubrel(packet_id))
+            else:
+                # Resend PUBLISH with DUP=1
+                await self._send_publish(
+                    client, pending.topic, pending.payload, pending.qos,
+                    pending.retain, dup=True, packet_id=packet_id
+                )
+    
+    async def _monitor_keepalive(self, client: ClientConnection) -> None:
+        """Monitor client keep-alive timeout."""
+        # Timeout is 1.5 * keep_alive per spec
+        timeout = client.keep_alive * 1.5
+        
+        while client.connected:
+            await asyncio.sleep(1)
+            
+            if time.time() - client.last_activity > timeout:
+                logger.warning(f"Keep-alive timeout for {client.client_id}")
+                await self._close_connection(client, publish_will=True)
+                break
+    
+    async def _close_connection(self, client: ClientConnection, publish_will: bool = False) -> None:
+        """Close client connection."""
+        client.connected = False
+        
+        # Publish will message if needed
+        if publish_will and client.will_message:
+            will = client.will_message
+            await self._forward_publish(will.topic, will.payload, will.qos, will.retain)
+            if will.retain:
+                self.topic_manager.set_retained_message(will.topic, will.payload, will.qos)
+            logger.info(f"Published will message for {client.client_id}")
+        
+        # Remove from active clients
+        if client.client_id and client.client_id in self.clients:
+            del self.clients[client.client_id]
+        
+        # Clean up session if clean_session was set
+        if client.clean_session and client.client_id:
+            self.session_manager.remove_session(client.client_id)
+        
+        # Close the connection
+        try:
+            client.writer.close()
+            await client.writer.wait_closed()
+        except Exception:
+            pass
+        
+        if client.client_id:
+            logger.info(f"Client {client.client_id} disconnected")
+
+
+async def run_broker(host: str = "0.0.0.0", port: int = 1883) -> None:
+    """Run the MQTT broker."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    broker = MQTTBroker(host=host, port=port)
+    
+    try:
+        await broker.start()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await broker.stop()

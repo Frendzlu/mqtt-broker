@@ -3,7 +3,7 @@ Tests for Topic management.
 """
 
 import pytest
-from mqtt_broker.topics import (
+from dp_mqtt.topics import (
     TopicManager, RetainedMessage,
     validate_topic_name, validate_topic_filter, topic_matches_filter
 )

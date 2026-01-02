@@ -1,8 +1,34 @@
+# Virtual environment
 .venv
+venv/
+env/
+
+# IDE
 .idea
+.vscode
+
+# Python cache
 __pycache__/
 *.pyc
-.vscode
-mqtt_broker/__pycache__/
-tests/__pycache__/
-mqtt_broker.egg-info/
+*.pyo
+*.pyd
+.Python
+
+# Package build
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS files
+.DS_Store
+Thumbs.db

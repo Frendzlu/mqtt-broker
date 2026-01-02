@@ -3,7 +3,7 @@ Tests for Session management.
 """
 
 import pytest
-from mqtt_broker.session import Session, SessionManager, WillMessage, PendingMessage
+from dp_mqtt.session import Session, SessionManager, WillMessage, PendingMessage
 
 
 class TestSession:

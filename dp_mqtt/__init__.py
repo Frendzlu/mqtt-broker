@@ -3,6 +3,7 @@ MQTT Broker Package
 """
 
 from .broker import MQTTBroker, run_broker
+from .client import Client, MQTTMessage, MQTTError, setup_client_logging
 from .protocol import (
     PacketType, ConnectReturnCode, ProtocolError, MalformedPacketError,
     ConnectPacket, PublishPacket, SubscribePacket, UnsubscribePacket
@@ -12,8 +13,15 @@ from .topics import TopicManager, topic_matches_filter
 
 __version__ = "0.1.0"
 __all__ = [
+    # Broker
     "MQTTBroker",
     "run_broker",
+    # Client
+    "Client",
+    "MQTTMessage",
+    "MQTTError",
+    "setup_client_logging",
+    # Protocol
     "PacketType",
     "ConnectReturnCode", 
     "ProtocolError",
@@ -22,9 +30,11 @@ __all__ = [
     "PublishPacket",
     "SubscribePacket",
     "UnsubscribePacket",
+    # Session
     "Session",
     "SessionManager",
     "WillMessage",
+    # Topics
     "TopicManager",
     "topic_matches_filter",
 ]

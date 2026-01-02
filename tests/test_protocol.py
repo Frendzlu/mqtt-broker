@@ -3,7 +3,7 @@ Tests for MQTT Protocol parsing and encoding.
 """
 
 import pytest
-from mqtt_broker.protocol import (
+from dp_mqtt.protocol import (
     decode_remaining_length, encode_remaining_length,
     decode_string, encode_string, decode_binary, encode_binary,
     parse_fixed_header, validate_packet_flags,

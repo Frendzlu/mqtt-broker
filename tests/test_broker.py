@@ -5,8 +5,8 @@ Integration tests for MQTT Broker.
 import pytest
 import asyncio
 import struct
-from mqtt_broker.broker import MQTTBroker, ClientConnection
-from mqtt_broker.protocol import (
+from dp_mqtt.broker import MQTTBroker, ClientConnection
+from dp_mqtt.protocol import (
     encode_string, encode_remaining_length, PacketType
 )
 
@@ -149,7 +149,7 @@ class TestProtocolIntegration:
         assert packet[0] >> 4 == PacketType.CONNECT
         
         # Verify it can be parsed
-        from mqtt_broker.protocol import parse_fixed_header, parse_connect
+        from dp_mqtt.protocol import parse_fixed_header, parse_connect
         
         ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
         assert ptype == PacketType.CONNECT
@@ -173,7 +173,7 @@ class TestProtocolIntegration:
             will_retain=True
         )
         
-        from mqtt_broker.protocol import parse_fixed_header, parse_connect
+        from dp_mqtt.protocol import parse_fixed_header, parse_connect
         
         ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
         payload = packet[header_size:header_size + remaining_len]
@@ -189,7 +189,7 @@ class TestProtocolIntegration:
         """Test SUBSCRIBE packet parsing."""
         packet = build_subscribe_packet(1, [("sport/tennis", 1), ("sport/#", 2)])
         
-        from mqtt_broker.protocol import parse_fixed_header, parse_subscribe
+        from dp_mqtt.protocol import parse_fixed_header, parse_subscribe
         
         ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
         payload = packet[header_size:header_size + remaining_len]
@@ -204,7 +204,7 @@ class TestProtocolIntegration:
         """Test PUBLISH packet with QoS 0."""
         packet = build_publish_packet("test/topic", b"hello", qos=0)
         
-        from mqtt_broker.protocol import parse_fixed_header, parse_publish
+        from dp_mqtt.protocol import parse_fixed_header, parse_publish
         
         ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
         payload = packet[header_size:header_size + remaining_len]
@@ -219,7 +219,7 @@ class TestProtocolIntegration:
         """Test PUBLISH packet with QoS 1."""
         packet = build_publish_packet("test/topic", b"hello", qos=1, packet_id=123)
         
-        from mqtt_broker.protocol import parse_fixed_header, parse_publish
+        from dp_mqtt.protocol import parse_fixed_header, parse_publish
         
         ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
         payload = packet[header_size:header_size + remaining_len]

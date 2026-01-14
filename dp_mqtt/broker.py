@@ -11,15 +11,13 @@ from dataclasses import dataclass
 
 from .protocol import (
     PacketType, ConnectReturnCode, ProtocolError, MalformedPacketError,
-    parse_fixed_header, validate_packet_flags, parse_connect, parse_publish,
-    parse_subscribe, parse_unsubscribe, parse_packet_id,
-    build_connack, build_publish, build_puback, build_pubrec, build_pubrel, build_pubcomp,
-    build_suback, build_unsuback, build_pingresp,
-    decode_remaining_length, encode_remaining_length,
-    topic_matches_filter as protocol_topic_matches
+    Codec, ConnectPacket, PublishPacket, SubscribePacket, UnsubscribePacket,
+    ConnackPacket, PubackPacket, PubrecPacket, PubrelPacket, PubcompPacket,
+    SubackPacket, UnsubackPacket, PingrespPacket,
 )
 from .session import Session, SessionManager, WillMessage, PendingMessage
 from .topics import TopicManager, topic_matches_filter
+from .auth import AuthManager
 
 
 logger = logging.getLogger(__name__)
@@ -46,10 +44,13 @@ class MQTTBroker:
     Handles client connections, message routing, and protocol compliance.
     """
     
-    def __init__(self, host: str = "0.0.0.0", port: int = 1883, max_qos: int = 2):
-        self.host = host
-        self.port = port
-        self.max_qos = max_qos
+    def __init__(self, host: str = "0.0.0.0", port: int = 1883, max_qos: int = 2, config_path: Optional[str] = None):
+        self.auth_manager = AuthManager(config_path)
+        
+        # Use config values if provided, otherwise use parameters
+        self.host = self.auth_manager.broker_config.host if config_path else host
+        self.port = self.auth_manager.broker_config.port if config_path else port
+        self.max_qos = self.auth_manager.broker_config.max_qos if config_path else max_qos
         
         self.session_manager = SessionManager()
         self.topic_manager = TopicManager()
@@ -206,7 +207,7 @@ class MQTTBroker:
                 payload = await client.reader.readexactly(remaining_length)
             
             # Validate flags
-            validate_packet_flags(packet_type, flags)
+            Codec.validate_packet_flags(packet_type, flags)
             
             return packet_type, flags, payload
         
@@ -221,7 +222,7 @@ class MQTTBroker:
         Returns True if connection was accepted, False otherwise.
         """
         try:
-            connect = parse_connect(payload)
+            connect = ConnectPacket.from_bytes(payload)
         except ProtocolError as e:
             logger.warning(f"Invalid CONNECT from {client.address}: {e}")
             # Protocol error: close without CONNACK
@@ -229,6 +230,13 @@ class MQTTBroker:
             return False
         
         client_id = connect.client_id
+        
+        # Authenticate user
+        if not self.auth_manager.authenticate(connect.username, connect.password):
+            logger.warning(f"Authentication failed for {client.address}")
+            await self._send_connack(client, False, ConnectReturnCode.NOT_AUTHORIZED)
+            await self._close_connection(client)
+            return False
         
         # Empty client ID handling
         if not client_id:
@@ -290,7 +298,7 @@ class MQTTBroker:
     async def _send_connack(self, client: ClientConnection, session_present: bool, 
                            return_code: ConnectReturnCode) -> None:
         """Send CONNACK packet."""
-        packet = build_connack(session_present, return_code)
+        packet = ConnackPacket(session_present=session_present, return_code=return_code).to_bytes()
         await self._send_packet(client, packet)
         
         if return_code != ConnectReturnCode.ACCEPTED:
@@ -321,7 +329,7 @@ class MQTTBroker:
     async def _handle_publish(self, client: ClientConnection, flags: int, payload: bytes) -> None:
         """Handle PUBLISH packet."""
         try:
-            publish = parse_publish(flags, payload)
+            publish = PublishPacket.from_bytes(flags, payload)
         except ProtocolError as e:
             logger.warning(f"Invalid PUBLISH from {client.client_id}: {e}")
             await self._close_connection(client)
@@ -339,14 +347,14 @@ class MQTTBroker:
         if publish.qos == 1:
             # packet_id is always present for QoS > 0
             assert publish.packet_id is not None
-            await self._send_packet(client, build_puback(publish.packet_id))
+            await self._send_packet(client, PubackPacket(publish.packet_id).to_bytes())
         elif publish.qos == 2:
             # packet_id is always present for QoS > 0
             assert publish.packet_id is not None
             assert client.session is not None
             # Store for duplicate detection
             client.session.pending_incoming_qos2.add(publish.packet_id)
-            await self._send_packet(client, build_pubrec(publish.packet_id))
+            await self._send_packet(client, PubrecPacket(publish.packet_id).to_bytes())
             return  # Don't forward yet, wait for PUBREL
         
         # Forward to subscribers (QoS 0 and 1, or after PUBREL for QoS 2)
@@ -354,7 +362,8 @@ class MQTTBroker:
     
     async def _handle_puback(self, client: ClientConnection, flags: int, payload: bytes) -> None:
         """Handle PUBACK packet (QoS 1 acknowledgment)."""
-        packet_id = parse_packet_id(payload)
+        puback = PubackPacket.from_bytes(payload)
+        packet_id = puback.packet_id
         
         assert client.session is not None
         if packet_id in client.session.pending_outgoing:
@@ -365,33 +374,36 @@ class MQTTBroker:
     
     async def _handle_pubrec(self, client: ClientConnection, flags: int, payload: bytes) -> None:
         """Handle PUBREC packet (QoS 2 step 2)."""
-        packet_id = parse_packet_id(payload)
+        pubrec = PubrecPacket.from_bytes(payload)
+        packet_id = pubrec.packet_id
         
         assert client.session is not None
         if packet_id in client.session.pending_outgoing:
             client.session.pending_outgoing[packet_id].state = "pubrec_received"
-            await self._send_packet(client, build_pubrel(packet_id))
+            await self._send_packet(client, PubrelPacket(packet_id).to_bytes())
             logger.debug(f"PUBREC received, PUBREL sent for packet {packet_id}")
         else:
             logger.warning(f"Unexpected PUBREC for packet {packet_id} from {client.client_id}")
     
     async def _handle_pubrel(self, client: ClientConnection, flags: int, payload: bytes) -> None:
         """Handle PUBREL packet (QoS 2 step 3)."""
-        packet_id = parse_packet_id(payload)
+        pubrel = PubrelPacket.from_bytes(payload)
+        packet_id = pubrel.packet_id
         
         assert client.session is not None
         if packet_id in client.session.pending_incoming_qos2:
             client.session.pending_incoming_qos2.discard(packet_id)
-            await self._send_packet(client, build_pubcomp(packet_id))
+            await self._send_packet(client, PubcompPacket(packet_id).to_bytes())
             logger.debug(f"PUBREL received, PUBCOMP sent for packet {packet_id}")
         else:
             # Still send PUBCOMP per spec
-            await self._send_packet(client, build_pubcomp(packet_id))
+            await self._send_packet(client, PubcompPacket(packet_id).to_bytes())
             logger.warning(f"PUBREL for unknown packet {packet_id} from {client.client_id}")
     
     async def _handle_pubcomp(self, client: ClientConnection, flags: int, payload: bytes) -> None:
         """Handle PUBCOMP packet (QoS 2 complete)."""
-        packet_id = parse_packet_id(payload)
+        pubcomp = PubcompPacket.from_bytes(payload)
+        packet_id = pubcomp.packet_id
         
         assert client.session is not None
         if packet_id in client.session.pending_outgoing:
@@ -403,7 +415,7 @@ class MQTTBroker:
     async def _handle_subscribe(self, client: ClientConnection, flags: int, payload: bytes) -> None:
         """Handle SUBSCRIBE packet."""
         try:
-            subscribe = parse_subscribe(payload)
+            subscribe = SubscribePacket.from_bytes(payload)
         except ProtocolError as e:
             logger.warning(f"Invalid SUBSCRIBE from {client.client_id}: {e}")
             await self._close_connection(client)
@@ -434,12 +446,12 @@ class MQTTBroker:
                 )
         
         # Send SUBACK
-        await self._send_packet(client, build_suback(subscribe.packet_id, return_codes))
+        await self._send_packet(client, SubackPacket(subscribe.packet_id, return_codes).to_bytes())
     
     async def _handle_unsubscribe(self, client: ClientConnection, flags: int, payload: bytes) -> None:
         """Handle UNSUBSCRIBE packet."""
         try:
-            unsubscribe = parse_unsubscribe(payload)
+            unsubscribe = UnsubscribePacket.from_bytes(payload)
         except ProtocolError as e:
             logger.warning(f"Invalid UNSUBSCRIBE from {client.client_id}: {e}")
             await self._close_connection(client)
@@ -451,11 +463,11 @@ class MQTTBroker:
             logger.debug(f"Client {client.client_id} unsubscribed from {topic_filter}")
         
         # Send UNSUBACK
-        await self._send_packet(client, build_unsuback(unsubscribe.packet_id))
+        await self._send_packet(client, UnsubackPacket(unsubscribe.packet_id).to_bytes())
     
     async def _handle_pingreq(self, client: ClientConnection, flags: int, payload: bytes) -> None:
         """Handle PINGREQ packet."""
-        await self._send_packet(client, build_pingresp())
+        await self._send_packet(client, PingrespPacket().to_bytes())
         logger.debug(f"PINGRESP sent to {client.client_id}")
     
     async def _handle_disconnect(self, client: ClientConnection, flags: int, payload: bytes) -> None:
@@ -499,7 +511,7 @@ class MQTTBroker:
                 timestamp=time.time()
             )
         
-        packet = build_publish(topic, payload, qos, retain, dup, packet_id)
+        packet = PublishPacket(topic=topic, payload=payload, qos=qos, retain=retain, dup=dup, packet_id=packet_id).to_bytes()
         await self._send_packet(client, packet)
     
     async def _send_packet(self, client: ClientConnection, packet: bytes) -> None:
@@ -519,7 +531,7 @@ class MQTTBroker:
             
             if pending.state == "pubrec_received":
                 # Was waiting for PUBCOMP, resend PUBREL
-                await self._send_packet(client, build_pubrel(packet_id))
+                await self._send_packet(client, PubrelPacket(packet_id).to_bytes())
             else:
                 # Resend PUBLISH with DUP=1
                 await self._send_publish(
@@ -571,14 +583,14 @@ class MQTTBroker:
             logger.info(f"Client {client.client_id} disconnected")
 
 
-async def run_broker(host: str = "0.0.0.0", port: int = 1883) -> None:
+async def run_broker(host: str = "0.0.0.0", port: int = 1883, config_path: Optional[str] = None) -> None:
     """Run the MQTT broker."""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    broker = MQTTBroker(host=host, port=port)
+    broker = MQTTBroker(host=host, port=port, config_path=config_path)
     
     try:
         await broker.start()

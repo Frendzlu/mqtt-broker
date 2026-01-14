@@ -7,7 +7,7 @@ import asyncio
 import struct
 from dp_mqtt.broker import MQTTBroker, ClientConnection
 from dp_mqtt.protocol import (
-    encode_string, encode_remaining_length, PacketType
+    Codec, PacketType, ConnectPacket, SubscribePacket, PublishPacket
 )
 
 
@@ -25,7 +25,7 @@ def build_connect_packet(
 ) -> bytes:
     """Build a CONNECT packet for testing."""
     # Variable header
-    variable_header = encode_string("MQTT")  # Protocol name
+    variable_header = Codec.encode_string("MQTT")  # Protocol name
     variable_header += bytes([4])  # Protocol level
     
     # Connect flags
@@ -46,14 +46,14 @@ def build_connect_packet(
     variable_header += struct.pack("!H", keep_alive)
     
     # Payload
-    payload = encode_string(client_id)
+    payload = Codec.encode_string(client_id)
     
     if will_flag:
-        payload += encode_string(will_topic)
+        payload += Codec.encode_string(will_topic)
         payload += struct.pack("!H", len(will_message)) + will_message
     
     if username is not None:
-        payload += encode_string(username)
+        payload += Codec.encode_string(username)
     
     if password is not None:
         payload += struct.pack("!H", len(password)) + password
@@ -61,7 +61,7 @@ def build_connect_packet(
     # Fixed header
     remaining = variable_header + payload
     fixed_header = bytes([PacketType.CONNECT << 4])
-    fixed_header += encode_remaining_length(len(remaining))
+    fixed_header += Codec.encode_remaining_length(len(remaining))
     
     return fixed_header + remaining
 
@@ -71,11 +71,11 @@ def build_subscribe_packet(packet_id: int, topics: list) -> bytes:
     payload = struct.pack("!H", packet_id)
     
     for topic, qos in topics:
-        payload += encode_string(topic)
+        payload += Codec.encode_string(topic)
         payload += bytes([qos])
     
     fixed_header = bytes([(PacketType.SUBSCRIBE << 4) | 0x02])
-    fixed_header += encode_remaining_length(len(payload))
+    fixed_header += Codec.encode_remaining_length(len(payload))
     
     return fixed_header + payload
 
@@ -91,14 +91,14 @@ def build_publish_packet(
     """Build a PUBLISH packet for testing."""
     flags = (dup << 3) | (qos << 1) | retain
     
-    variable_header = encode_string(topic)
+    variable_header = Codec.encode_string(topic)
     if qos > 0 and packet_id is not None:
         variable_header += struct.pack("!H", packet_id)
     
     message = variable_header + payload
     
     fixed_header = bytes([(PacketType.PUBLISH << 4) | flags])
-    fixed_header += encode_remaining_length(len(message))
+    fixed_header += Codec.encode_remaining_length(len(message))
     
     return fixed_header + message
 
@@ -149,14 +149,12 @@ class TestProtocolIntegration:
         assert packet[0] >> 4 == PacketType.CONNECT
         
         # Verify it can be parsed
-        from dp_mqtt.protocol import parse_fixed_header, parse_connect
-        
-        ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
+        ptype, flags, remaining_len, header_size = Codec.parse_fixed_header(packet)
         assert ptype == PacketType.CONNECT
         assert flags == 0
         
         payload = packet[header_size:header_size + remaining_len]
-        connect = parse_connect(payload)
+        connect = ConnectPacket.from_bytes(payload)
         
         assert connect.client_id == "test123"
         assert connect.protocol_name == "MQTT"
@@ -173,11 +171,9 @@ class TestProtocolIntegration:
             will_retain=True
         )
         
-        from dp_mqtt.protocol import parse_fixed_header, parse_connect
-        
-        ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
+        ptype, flags, remaining_len, header_size = Codec.parse_fixed_header(packet)
         payload = packet[header_size:header_size + remaining_len]
-        connect = parse_connect(payload)
+        connect = ConnectPacket.from_bytes(payload)
         
         assert connect.flags.will_flag is True
         assert connect.will_topic == "client/status"
@@ -189,11 +185,9 @@ class TestProtocolIntegration:
         """Test SUBSCRIBE packet parsing."""
         packet = build_subscribe_packet(1, [("sport/tennis", 1), ("sport/#", 2)])
         
-        from dp_mqtt.protocol import parse_fixed_header, parse_subscribe
-        
-        ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
+        ptype, flags, remaining_len, header_size = Codec.parse_fixed_header(packet)
         payload = packet[header_size:header_size + remaining_len]
-        subscribe = parse_subscribe(payload)
+        subscribe = SubscribePacket.from_bytes(payload)
         
         assert subscribe.packet_id == 1
         assert len(subscribe.topics) == 2
@@ -204,11 +198,9 @@ class TestProtocolIntegration:
         """Test PUBLISH packet with QoS 0."""
         packet = build_publish_packet("test/topic", b"hello", qos=0)
         
-        from dp_mqtt.protocol import parse_fixed_header, parse_publish
-        
-        ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
+        ptype, flags, remaining_len, header_size = Codec.parse_fixed_header(packet)
         payload = packet[header_size:header_size + remaining_len]
-        publish = parse_publish(flags, payload)
+        publish = PublishPacket.from_bytes(flags, payload)
         
         assert publish.topic == "test/topic"
         assert publish.payload == b"hello"
@@ -219,11 +211,9 @@ class TestProtocolIntegration:
         """Test PUBLISH packet with QoS 1."""
         packet = build_publish_packet("test/topic", b"hello", qos=1, packet_id=123)
         
-        from dp_mqtt.protocol import parse_fixed_header, parse_publish
-        
-        ptype, flags, remaining_len, header_size = parse_fixed_header(packet)
+        ptype, flags, remaining_len, header_size = Codec.parse_fixed_header(packet)
         payload = packet[header_size:header_size + remaining_len]
-        publish = parse_publish(flags, payload)
+        publish = PublishPacket.from_bytes(flags, payload)
         
         assert publish.qos == 1
         assert publish.packet_id == 123

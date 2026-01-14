@@ -15,9 +15,7 @@ from enum import IntEnum
 
 from .protocol import (
     PacketType, ConnectReturnCode, ProtocolError, MalformedPacketError,
-    encode_string, encode_remaining_length, decode_string, decode_remaining_length,
-    build_publish, build_puback, build_pubrec, build_pubrel, build_pubcomp,
-    parse_publish,
+    Codec, PublishPacket, PubackPacket, PubrecPacket, PubrelPacket, PubcompPacket,
 )
 
 
@@ -312,7 +310,7 @@ class Client:
         if qos > 0:
             packet_id = self._get_next_packet_id()
         
-        packet = build_publish(topic, payload, qos, retain, dup=False, packet_id=packet_id)
+        packet = PublishPacket(topic=topic, payload=payload, qos=qos, retain=retain, dup=False, packet_id=packet_id).to_bytes()
         await self._send_packet(packet)
         
         if qos == 0:
@@ -521,7 +519,7 @@ class Client:
                 if ptype == PacketType.PUBREC:
                     recv_id = struct.unpack("!H", payload[:2])[0]
                     if recv_id == packet_id:
-                        await self._send_packet(build_pubrel(packet_id))
+                        await self._send_packet(PubrelPacket(packet_id=packet_id).to_bytes())
                         break
             
             # Wait for PUBCOMP
@@ -649,7 +647,7 @@ class Client:
     
     async def _handle_publish(self, flags: int, payload: bytes) -> None:
         """Handle incoming PUBLISH packet."""
-        publish = parse_publish(flags, payload)
+        publish = PublishPacket.from_bytes(flags, payload)
         
         msg = MQTTMessage(
             topic=publish.topic,
@@ -664,7 +662,7 @@ class Client:
         if publish.qos == 1:
             # Send PUBACK
             assert publish.packet_id is not None
-            await self._send_packet(build_puback(publish.packet_id))
+            await self._send_packet(PubackPacket(publish.packet_id).to_bytes())
             if self.on_message:
                 self.on_message(self, msg)
         
@@ -672,7 +670,7 @@ class Client:
             # Send PUBREC, store message for later delivery
             assert publish.packet_id is not None
             self._pending_qos2[publish.packet_id] = msg
-            await self._send_packet(build_pubrec(publish.packet_id))
+            await self._send_packet(PubrecPacket(publish.packet_id).to_bytes())
         
         else:  # QoS 0
             if self.on_message:
@@ -692,14 +690,14 @@ class Client:
         packet_id = struct.unpack("!H", payload[:2])[0]
         
         # Send PUBREL
-        await self._send_packet(build_pubrel(packet_id))
+        await self._send_packet(PubrelPacket(packet_id).to_bytes())
     
     async def _handle_pubrel(self, flags: int, payload: bytes) -> None:
         """Handle PUBREL (QoS 2 step 3)."""
         packet_id = struct.unpack("!H", payload[:2])[0]
         
         # Send PUBCOMP
-        await self._send_packet(build_pubcomp(packet_id))
+        await self._send_packet(PubcompPacket(packet_id).to_bytes())
         
         # Deliver message
         if packet_id in self._pending_qos2:
@@ -745,7 +743,7 @@ class Client:
         variable_header = bytearray()
         
         # Protocol name "MQTT"
-        variable_header.extend(encode_string("MQTT"))
+        variable_header.extend(Codec.encode_string("MQTT"))
         
         # Protocol level (4 for MQTT 3.1.1)
         variable_header.append(0x04)
@@ -773,17 +771,17 @@ class Client:
         payload = bytearray()
         
         # Client ID
-        payload.extend(encode_string(self.config.client_id))
+        payload.extend(Codec.encode_string(self.config.client_id))
         
         # Will topic and message
         if self.config.will_topic:
-            payload.extend(encode_string(self.config.will_topic))
+            payload.extend(Codec.encode_string(self.config.will_topic))
             payload.extend(struct.pack("!H", len(self.config.will_payload)))
             payload.extend(self.config.will_payload)
         
         # Username
         if self.config.username:
-            payload.extend(encode_string(self.config.username))
+            payload.extend(Codec.encode_string(self.config.username))
         
         # Password
         if self.config.password:
@@ -793,7 +791,7 @@ class Client:
         
         # Fixed header
         remaining_length = len(variable_header) + len(payload)
-        fixed_header = bytes([0x10]) + encode_remaining_length(remaining_length)
+        fixed_header = bytes([0x10]) + Codec.encode_remaining_length(remaining_length)
         
         return fixed_header + bytes(variable_header) + bytes(payload)
     
@@ -805,12 +803,12 @@ class Client:
         # Payload
         payload = bytearray()
         for topic_filter, qos in topics:
-            payload.extend(encode_string(topic_filter))
+            payload.extend(Codec.encode_string(topic_filter))
             payload.append(qos & 0x03)
         
         # Fixed header (SUBSCRIBE = 0x82)
         remaining_length = len(variable_header) + len(payload)
-        fixed_header = bytes([0x82]) + encode_remaining_length(remaining_length)
+        fixed_header = bytes([0x82]) + Codec.encode_remaining_length(remaining_length)
         
         return fixed_header + variable_header + bytes(payload)
     
@@ -822,10 +820,10 @@ class Client:
         # Payload
         payload = bytearray()
         for topic_filter in topics:
-            payload.extend(encode_string(topic_filter))
+            payload.extend(Codec.encode_string(topic_filter))
         
         # Fixed header (UNSUBSCRIBE = 0xA2)
         remaining_length = len(variable_header) + len(payload)
-        fixed_header = bytes([0xA2]) + encode_remaining_length(remaining_length)
+        fixed_header = bytes([0xA2]) + Codec.encode_remaining_length(remaining_length)
         
         return fixed_header + variable_header + bytes(payload)

@@ -58,6 +58,11 @@ def main():
         help="Port to bind to (default: 1883)"
     )
     parser.add_argument(
+        "--config", "-c",
+        default=None,
+        help="Path to config.yaml file (default: ./config.yaml if exists)"
+    )
+    parser.add_argument(
         "--debug", "-d",
         action="store_true",
         help="Enable debug logging"
@@ -73,11 +78,13 @@ def main():
     log_file = setup_logging(debug=args.debug, log_dir=args.log_dir)
     
     print(f"Starting MQTT Broker on {args.host}:{args.port}")
+    if args.config:
+        print(f"Config file: {args.config}")
     print(f"Logging to: {log_file}")
     print("Press Ctrl+C to stop")
     
     try:
-        asyncio.run(run_broker(host=args.host, port=args.port))
+        asyncio.run(run_broker(host=args.host, port=args.port, config_path=args.config))
     except KeyboardInterrupt:
         print("\nBroker stopped")
 

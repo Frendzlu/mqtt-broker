@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  mqtt-broker:
+    build: .
+    container_name: dp-mqtt-broker
+    ports:
+      - "${MQTT_PORT:-1883}:${MQTT_PORT:-1883}"
+    volumes:
+      # Mount config from deployment directory
+      - ./config.yaml:/config/config.yaml:ro
+      # Optional: mount logs directory
+      - ./logs:/app/logs
+    environment:
+      - CONFIG_PATH=/config/config.yaml
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+networks:
+  mqtt-network:
+    driver: bridge

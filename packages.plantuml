@@ -1,0 +1,42 @@
+@startuml packages
+set namespaceSeparator none
+package "dp_mqtt" as dp_mqtt {
+}
+package "dp_mqtt.MQTT3_1PacketFactory" as dp_mqtt.MQTT3_1PacketFactory {
+}
+package "dp_mqtt.MQTTPacketFactory" as dp_mqtt.MQTTPacketFactory {
+}
+package "dp_mqtt.__main__" as dp_mqtt.__main__ {
+}
+package "dp_mqtt.auth" as dp_mqtt.auth {
+}
+package "dp_mqtt.broker" as dp_mqtt.broker {
+}
+package "dp_mqtt.client" as dp_mqtt.client {
+}
+package "dp_mqtt.protocol" as dp_mqtt.protocol {
+}
+package "dp_mqtt.session" as dp_mqtt.session {
+}
+package "dp_mqtt.topics" as dp_mqtt.topics {
+}
+dp_mqtt --> dp_mqtt.broker
+dp_mqtt --> dp_mqtt.client
+dp_mqtt --> dp_mqtt.protocol
+dp_mqtt --> dp_mqtt.session
+dp_mqtt --> dp_mqtt.topics
+dp_mqtt.MQTT3_1PacketFactory --> dp_mqtt.MQTTPacketFactory
+dp_mqtt.MQTT3_1PacketFactory --> dp_mqtt.broker
+dp_mqtt.MQTT3_1PacketFactory --> dp_mqtt.protocol
+dp_mqtt.MQTTPacketFactory --> dp_mqtt.broker
+dp_mqtt.MQTTPacketFactory --> dp_mqtt.protocol
+dp_mqtt.__main__ --> dp_mqtt.broker
+dp_mqtt.broker --> dp_mqtt.MQTT3_1PacketFactory
+dp_mqtt.broker --> dp_mqtt.auth
+dp_mqtt.broker --> dp_mqtt.protocol
+dp_mqtt.broker --> dp_mqtt.session
+dp_mqtt.broker --> dp_mqtt.topics
+dp_mqtt.client --> dp_mqtt.protocol
+dp_mqtt.protocol --> dp_mqtt.topics
+dp_mqtt.protocol ..> dp_mqtt.broker
+@enduml

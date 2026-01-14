@@ -19,6 +19,8 @@ from .session import Session, SessionManager, WillMessage, PendingMessage
 from .topics import TopicManager, topic_matches_filter
 from .auth import AuthManager
 
+from MQTT3_1PacketFactory import MQTT3_1PacketFactory
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,9 @@ class MQTTBroker:
         
         # Connection timeout for CONNECT packet (seconds)
         self.connect_timeout = 30
+
+        # MQTT factory
+        self.factory = MQTT3_1PacketFactory()
     
     async def start(self) -> None:
         """Start the MQTT broker."""
@@ -313,29 +318,7 @@ class MQTTBroker:
         """
         try:
             # Parse packet into appropriate packet object
-            packet = None
-            
-            if packet_type == PacketType.PUBLISH:
-                packet = PublishPacket.from_bytes(flags, payload)
-            elif packet_type == PacketType.PUBACK:
-                packet = PubackPacket.from_bytes(payload)
-            elif packet_type == PacketType.PUBREC:
-                packet = PubrecPacket.from_bytes(payload)
-            elif packet_type == PacketType.PUBREL:
-                packet = PubrelPacket.from_bytes(payload)
-            elif packet_type == PacketType.PUBCOMP:
-                packet = PubcompPacket.from_bytes(payload)
-            elif packet_type == PacketType.SUBSCRIBE:
-                packet = SubscribePacket.from_bytes(payload)
-            elif packet_type == PacketType.UNSUBSCRIBE:
-                packet = UnsubscribePacket.from_bytes(payload)
-            elif packet_type == PacketType.PINGREQ:
-                packet = PingreqPacket.from_bytes(payload)
-            elif packet_type == PacketType.DISCONNECT:
-                packet = DisconnectPacket.from_bytes(payload)
-            else:
-                logger.warning(f"Unhandled packet type {packet_type} from {client.client_id}")
-                return
+            packet = self.factory.construct_packet(client, packet_type, flags, payload)
             
             await packet.handle(self, client)
             

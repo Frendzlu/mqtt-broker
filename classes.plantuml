@@ -1,0 +1,290 @@
+@startuml classes
+set namespaceSeparator none
+class "AuthManager" as dp_mqtt.auth.AuthManager {
+  allow_anonymous : bool
+  broker_config
+  config_path : Path
+  users : Dict[str, User]
+  authenticate(username: Optional[str], password: Optional[bytes]) -> bool
+  generate_password_hash(password: str) -> str
+  is_authorized(username: Optional[str], topic: str, access_type: str) -> bool
+}
+class "BrokerConfig" as dp_mqtt.auth.BrokerConfig {
+  host : str
+  max_qos : int
+  port : int
+}
+class "Client" as dp_mqtt.client.Client {
+  config
+  is_connected : bool
+  on_connect : Optional[Callable[['Client', int], None]]
+  on_disconnect : Optional[Callable[['Client', Optional[Exception]], None]]
+  on_message : Optional[Callable[['Client', MQTTMessage], None]]
+  on_publish : Optional[Callable[['Client', int], None]]
+  on_subscribe : Optional[Callable[['Client', int, List[int]], None]]
+  on_unsubscribe : Optional[Callable[['Client', int], None]]
+  connect(host: str, port: int, keepalive: int) -> int
+  disconnect() -> None
+  loop_forever() -> None
+  loop_start() -> None
+  loop_stop() -> None
+  publish(topic: str, payload: Union[str, bytes], qos: int, retain: bool) -> int
+  subscribe(topic: Union[str, List[Tuple[str, int]]], qos: int) -> Tuple[int, List[int]]
+  unsubscribe(topic: Union[str, List[str]]) -> int
+  username_pw_set(username: str, password: Optional[str]) -> None
+  will_set(topic: str, payload: Union[str, bytes], qos: int, retain: bool) -> None
+}
+class "ClientConnection" as dp_mqtt.broker.ClientConnection {
+  address : str
+  clean_session : bool
+  client_id : Optional[str]
+  connected : bool
+  keep_alive : int
+  last_activity : float
+  reader : StreamReader
+  session : Optional[Session]
+  will_message : Optional[WillMessage]
+  writer : StreamWriter
+}
+class "Codec" as dp_mqtt.protocol.Codec {
+  decode_binary(data: bytes, offset: int) -> Tuple[bytes, int]
+  decode_remaining_length(data: bytes, offset: int) -> Tuple[int, int]
+  decode_string(data: bytes, offset: int) -> Tuple[str, int]
+  encode_binary(data: bytes) -> bytes
+  encode_remaining_length(length: int) -> bytes
+  encode_string(s: str) -> bytes
+  parse_fixed_header(data: bytes) -> Tuple[PacketType, int, int, int]
+  topic_matches_filter(topic: str, filter_pattern: str) -> bool
+  validate_packet_flags(packet_type: PacketType, flags: int) -> None
+  validate_topic_filter(topic_filter: str) -> None
+}
+class "ConnackPacket" as dp_mqtt.protocol.ConnackPacket {
+  return_code
+  session_present : bool
+  to_bytes() -> bytes
+}
+class "ConnectFlags" as dp_mqtt.protocol.ConnectFlags {
+  clean_session : bool
+  password_flag : bool
+  username_flag : bool
+  will_flag : bool
+  will_qos : int
+  will_retain : bool
+}
+class "ConnectPacket" as dp_mqtt.protocol.ConnectPacket {
+  client_id : str
+  flags
+  keep_alive : int
+  password : Optional[bytes]
+  protocol_level : int
+  protocol_name : str
+  username : Optional[str]
+  will_message : Optional[bytes]
+  will_topic : Optional[str]
+  from_bytes(data: bytes) -> 'ConnectPacket'
+}
+class "ConnectReturnCode" as dp_mqtt.protocol.ConnectReturnCode {
+  name
+}
+class "<color:red>ConnectionError</color>" as dp_mqtt.client.ConnectionError {
+}
+class "DisconnectPacket" as dp_mqtt.protocol.DisconnectPacket {
+  from_bytes(data: bytes) -> 'DisconnectPacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+}
+class "GenericPacket" as dp_mqtt.protocol.GenericPacket {
+  {abstract}handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+}
+class "MQTT3_1PacketFactory" as dp_mqtt.MQTT3_1PacketFactory.MQTT3_1PacketFactory {
+  construct_packet(client: ClientConnection, packet_type: PacketType, flags: int, payload: bytes)
+}
+class "MQTTBroker" as dp_mqtt.broker.MQTTBroker {
+  auth_manager
+  clients : Dict[str, ClientConnection]
+  connect_timeout : int
+  factory
+  host : str
+  max_qos : int
+  port : int
+  running : bool
+  server : Optional[asyncio.Server]
+  session_manager
+  topic_manager
+  start() -> None
+  stop() -> None
+}
+class "MQTTClientConfig" as dp_mqtt.client.MQTTClientConfig {
+  clean_session : bool
+  client_id : str
+  keep_alive : int
+  password : Optional[str]
+  username : Optional[str]
+  will_payload : bytes
+  will_qos : int
+  will_retain : bool
+  will_topic : Optional[str]
+}
+class "<color:red>MQTTError</color>" as dp_mqtt.client.MQTTError {
+}
+class "MQTTMessage" as dp_mqtt.client.MQTTMessage {
+  mid : int
+  payload : bytes
+  payload_str : str
+  qos : int
+  retain : bool
+  timestamp : float
+  timestamp_str : str
+  topic : str
+}
+class "MQTTPacketFactory" as dp_mqtt.MQTTPacketFactory.MQTTPacketFactory {
+  {abstract}construct_packet(client: ClientConnection, packet_type: PacketType, flags: int, payload: bytes)
+}
+class "<color:red>MalformedPacketError</color>" as dp_mqtt.protocol.MalformedPacketError {
+}
+class "PacketType" as dp_mqtt.protocol.PacketType {
+  name
+}
+class "PendingMessage" as dp_mqtt.session.PendingMessage {
+  packet_id : int
+  payload : bytes
+  qos : int
+  retain : bool
+  retry_count : int
+  state : str
+  timestamp : float
+  topic : str
+}
+class "PingreqPacket" as dp_mqtt.protocol.PingreqPacket {
+  from_bytes(data: bytes) -> 'PingreqPacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+}
+class "PingrespPacket" as dp_mqtt.protocol.PingrespPacket {
+  to_bytes() -> bytes
+}
+class "<color:red>ProtocolError</color>" as dp_mqtt.protocol.ProtocolError {
+}
+class "PubackPacket" as dp_mqtt.protocol.PubackPacket {
+  packet_id : int
+  from_bytes(data: bytes) -> 'PubackPacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+  to_bytes() -> bytes
+}
+class "PubcompPacket" as dp_mqtt.protocol.PubcompPacket {
+  packet_id : int
+  from_bytes(data: bytes) -> 'PubcompPacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+  to_bytes() -> bytes
+}
+class "PublishPacket" as dp_mqtt.protocol.PublishPacket {
+  dup : bool
+  flags_byte : int
+  packet_id : Optional[int]
+  payload : bytes
+  qos : int
+  retain : bool
+  topic : str
+  from_bytes(flags: int, data: bytes) -> 'PublishPacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+  to_bytes() -> bytes
+}
+class "PubrecPacket" as dp_mqtt.protocol.PubrecPacket {
+  packet_id : int
+  from_bytes(data: bytes) -> 'PubrecPacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+  to_bytes() -> bytes
+}
+class "PubrelPacket" as dp_mqtt.protocol.PubrelPacket {
+  packet_id : int
+  from_bytes(data: bytes) -> 'PubrelPacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+  to_bytes() -> bytes
+}
+class "QoSLevel" as dp_mqtt.session.QoSLevel {
+  name
+}
+class "RetainedMessage" as dp_mqtt.topics.RetainedMessage {
+  payload : bytes
+  qos : int
+  timestamp : float
+  topic : str
+}
+class "Session" as dp_mqtt.session.Session {
+  client_id : str
+  next_packet_id : int
+  pending_incoming_qos2 : Set[int]
+  pending_outgoing : Dict[int, PendingMessage]
+  subscriptions : Dict[str, int]
+  add_subscription(topic_filter: str, qos: int) -> None
+  clear() -> None
+  get_matching_qos(topic: str, topic_matches_filter) -> Optional[int]
+  get_next_packet_id() -> int
+  remove_subscription(topic_filter: str) -> bool
+}
+class "SessionManager" as dp_mqtt.session.SessionManager {
+  sessions : Dict[str, Session]
+  get_or_create_session(client_id: str, clean_session: bool) -> Tuple[Session, bool]
+  has_session(client_id: str) -> bool
+  remove_session(client_id: str) -> None
+}
+class "SubackPacket" as dp_mqtt.protocol.SubackPacket {
+  packet_id : int
+  return_codes : List[int]
+  to_bytes() -> bytes
+}
+class "SubscribePacket" as dp_mqtt.protocol.SubscribePacket {
+  packet_id : int
+  topics : List[Tuple[str, int]]
+  from_bytes(data: bytes) -> 'SubscribePacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+}
+class "TopicManager" as dp_mqtt.topics.TopicManager {
+  retained_messages : Dict[str, RetainedMessage]
+  clear_retained_message(topic: str) -> None
+  get_matching_retained_messages(topic_filter: str, topic_matches_filter) -> List[RetainedMessage]
+  get_retained_message(topic: str) -> Optional[RetainedMessage]
+  set_retained_message(topic: str, payload: bytes, qos: int) -> None
+}
+class "UnsubackPacket" as dp_mqtt.protocol.UnsubackPacket {
+  packet_id : int
+  to_bytes() -> bytes
+}
+class "UnsubscribePacket" as dp_mqtt.protocol.UnsubscribePacket {
+  packet_id : int
+  topics : List[str]
+  from_bytes(data: bytes) -> 'UnsubscribePacket'
+  handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
+}
+class "User" as dp_mqtt.auth.User {
+  allowed_topics : Optional[List[str]]
+  password_hash : str
+  username : str
+}
+class "WillMessage" as dp_mqtt.session.WillMessage {
+  payload : bytes
+  qos : int
+  retain : bool
+  topic : str
+}
+dp_mqtt.client.ConnectionError --|> dp_mqtt.client.MQTTError
+dp_mqtt.protocol.DisconnectPacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.MalformedPacketError --|> dp_mqtt.protocol.ProtocolError
+dp_mqtt.protocol.PingreqPacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.PubackPacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.PubcompPacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.PublishPacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.PubrecPacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.PubrelPacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.SubscribePacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.UnsubscribePacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.auth.AuthManager --> dp_mqtt.auth.User : users
+dp_mqtt.broker.MQTTBroker --> dp_mqtt.broker.ClientConnection : clients
+dp_mqtt.protocol.ConnectPacket --> dp_mqtt.protocol.ConnectFlags : flags
+dp_mqtt.protocol.ConnackPacket --> dp_mqtt.protocol.ConnectReturnCode : return_code
+dp_mqtt.session.SessionManager --> dp_mqtt.session.Session : sessions
+dp_mqtt.topics.TopicManager --> dp_mqtt.topics.RetainedMessage : retained_messages
+dp_mqtt.auth.AuthManager --* dp_mqtt.broker.MQTTBroker : auth_manager
+dp_mqtt.auth.BrokerConfig --* dp_mqtt.auth.AuthManager : broker_config
+dp_mqtt.client.MQTTClientConfig --* dp_mqtt.client.Client : config
+dp_mqtt.session.SessionManager --* dp_mqtt.broker.MQTTBroker : session_manager
+dp_mqtt.topics.TopicManager --* dp_mqtt.broker.MQTTBroker : topic_manager
+@enduml

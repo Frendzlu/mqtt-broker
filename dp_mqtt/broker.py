@@ -314,7 +314,6 @@ class MQTTBroker:
                             flags: int, payload: bytes) -> None:
         """
         Handle incoming packet after CONNECT.
-        Strategy Pattern: Parse packet and delegate to packet's handle() method.
         """
         try:
             # Parse packet into appropriate packet object

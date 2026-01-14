@@ -303,6 +303,7 @@ class GenericPacket(ABC):
             broker: The MQTT broker instance
             client: The client connection that sent this packet
         """
+
         pass
 
 
@@ -456,7 +457,7 @@ class PublishPacket(GenericPacket):
     flags_byte: int = 0  # Store flags for parsing
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle PUBLISH packet - Strategy Pattern implementation."""
+        """Handle PUBLISH packet."""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -556,7 +557,7 @@ class PubackPacket(GenericPacket):
     packet_id: int
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle PUBACK packet - Strategy Pattern implementation."""
+        """Handle PUBACK packet."""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -587,7 +588,7 @@ class PubrecPacket(GenericPacket):
     packet_id: int
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle PUBREC packet - Strategy Pattern implementation."""
+        """Handle PUBREC packet."""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -619,7 +620,7 @@ class PubrelPacket(GenericPacket):
     packet_id: int
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle PUBREL packet - Strategy Pattern implementation."""
+        """Handle PUBREL packet."""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -653,7 +654,7 @@ class PubcompPacket(GenericPacket):
     packet_id: int
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle PUBCOMP packet - Strategy Pattern implementation."""
+        """Handle PUBCOMP packet."""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -685,7 +686,7 @@ class SubscribePacket(GenericPacket):
     topics: List[Tuple[str, int]] = field(default_factory=list)  # List of (topic_filter, requested_qos)
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle SUBSCRIBE packet - Strategy Pattern implementation."""
+        """Handle SUBSCRIBE packet."""
         import logging
         from .topics import topic_matches_filter
         logger = logging.getLogger(__name__)
@@ -781,7 +782,7 @@ class UnsubscribePacket(GenericPacket):
     topics: List[str] = field(default_factory=list)
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle UNSUBSCRIBE packet - Strategy Pattern implementation."""
+        """Handle UNSUBSCRIBE packet."""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -842,7 +843,7 @@ class PingreqPacket(GenericPacket):
     """PINGREQ packet for keep-alive ping."""
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle PINGREQ packet - Strategy Pattern implementation."""
+        """Handle PINGREQ packet."""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -860,7 +861,7 @@ class DisconnectPacket(GenericPacket):
     """DISCONNECT packet for graceful client disconnection."""
     
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
-        """Handle DISCONNECT packet - Strategy Pattern implementation."""
+        """Handle DISCONNECT packet."""
         import logging
         logger = logging.getLogger(__name__)
         

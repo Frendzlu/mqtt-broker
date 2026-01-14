@@ -7,5 +7,5 @@ class MQTTPacketFactory(ABC):
     """Abstract factory for creating MQTT packet instances."""
 
     @abstractmethod
-    def construct_packet(self, client: ClientConnection, packet_type: PacketType, flags: int, payload: bytes) -> Optional[GenericPacket]:
+    def construct_packet(self, packet_type: PacketType, flags: int, payload: bytes) -> Optional[GenericPacket]:
         pass

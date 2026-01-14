@@ -1,3 +1,4 @@
+from typing import Optional
 from .MQTTPacketFactory import MQTTPacketFactory
 from .protocol import (
     PacketType,
@@ -9,7 +10,8 @@ from .protocol import (
     SubscribePacket,
     UnsubscribePacket,
     PingreqPacket,
-    DisconnectPacket
+    DisconnectPacket,
+    GenericPacket
 )
 from .broker import logger
 from .broker import ClientConnection
@@ -18,7 +20,7 @@ class MQTT3_1PacketFactory(MQTTPacketFactory):
     def __init__(self):
         super().__init__()
 
-    def construct_packet(self, client: ClientConnection, packet_type: PacketType, flags: int, payload: bytes):
+    def construct_packet(self, client: ClientConnection, packet_type: PacketType, flags: int, payload: bytes) -> Optional[GenericPacket]:
         if packet_type == PacketType.PUBLISH:
             packet = PublishPacket.from_bytes(flags, payload)
         elif packet_type == PacketType.PUBACK:
@@ -39,6 +41,6 @@ class MQTT3_1PacketFactory(MQTTPacketFactory):
             packet = DisconnectPacket.from_bytes(payload)
         else:
             logger.warning(f"Unhandled packet type {packet_type} from {client.client_id}")
-            return
+            return None
 
         return packet

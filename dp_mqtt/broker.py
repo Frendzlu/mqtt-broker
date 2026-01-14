@@ -319,6 +319,9 @@ class MQTTBroker:
             # Parse packet into appropriate packet object
             packet = self.factory.construct_packet(client, packet_type, flags, payload)
             
+            if packet is None:
+                raise ProtocolError(f"Unsupported packet type: {packet_type.name}")
+
             await packet.handle(self, client)
             
         except ProtocolError as e:

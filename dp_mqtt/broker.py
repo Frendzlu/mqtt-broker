@@ -13,7 +13,7 @@ from .protocol import (
     PacketType, ConnectReturnCode, ProtocolError, MalformedPacketError,
     Codec, ConnectPacket, PublishPacket, SubscribePacket, UnsubscribePacket,
     ConnackPacket, PubackPacket, PubrecPacket, PubrelPacket, PubcompPacket,
-    SubackPacket, UnsubackPacket, PingrespPacket,
+    SubackPacket, UnsubackPacket, PingrespPacket, PingreqPacket, DisconnectPacket,
 )
 from .session import Session, SessionManager, WillMessage, PendingMessage
 from .topics import TopicManager, topic_matches_filter
@@ -307,175 +307,42 @@ class MQTTBroker:
     
     async def _handle_packet(self, client: ClientConnection, packet_type: PacketType, 
                             flags: int, payload: bytes) -> None:
-        """Handle incoming packet after CONNECT."""
-        handlers = {
-            PacketType.PUBLISH: self._handle_publish,
-            PacketType.PUBACK: self._handle_puback,
-            PacketType.PUBREC: self._handle_pubrec,
-            PacketType.PUBREL: self._handle_pubrel,
-            PacketType.PUBCOMP: self._handle_pubcomp,
-            PacketType.SUBSCRIBE: self._handle_subscribe,
-            PacketType.UNSUBSCRIBE: self._handle_unsubscribe,
-            PacketType.PINGREQ: self._handle_pingreq,
-            PacketType.DISCONNECT: self._handle_disconnect,
-        }
-        
-        handler = handlers.get(packet_type)
-        if handler:
-            await handler(client, flags, payload)
-        else:
-            logger.warning(f"Unhandled packet type {packet_type} from {client.client_id}")
-    
-    async def _handle_publish(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle PUBLISH packet."""
+        """
+        Handle incoming packet after CONNECT.
+        Strategy Pattern: Parse packet and delegate to packet's handle() method.
+        """
         try:
-            publish = PublishPacket.from_bytes(flags, payload)
-        except ProtocolError as e:
-            logger.warning(f"Invalid PUBLISH from {client.client_id}: {e}")
-            await self._close_connection(client)
-            return
-        
-        logger.debug(f"PUBLISH from {client.client_id}: topic={publish.topic}, qos={publish.qos}, retain={publish.retain}")
-        
-        # Handle retained message
-        if publish.retain:
-            self.topic_manager.set_retained_message(
-                publish.topic, publish.payload, publish.qos
-            )
-        
-        # Send acknowledgment based on QoS
-        if publish.qos == 1:
-            # packet_id is always present for QoS > 0
-            assert publish.packet_id is not None
-            await self._send_packet(client, PubackPacket(publish.packet_id).to_bytes())
-        elif publish.qos == 2:
-            # packet_id is always present for QoS > 0
-            assert publish.packet_id is not None
-            assert client.session is not None
-            # Store for duplicate detection
-            client.session.pending_incoming_qos2.add(publish.packet_id)
-            await self._send_packet(client, PubrecPacket(publish.packet_id).to_bytes())
-            return  # Don't forward yet, wait for PUBREL
-        
-        # Forward to subscribers (QoS 0 and 1, or after PUBREL for QoS 2)
-        await self._forward_publish(publish.topic, publish.payload, publish.qos, publish.retain)
-    
-    async def _handle_puback(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle PUBACK packet (QoS 1 acknowledgment)."""
-        puback = PubackPacket.from_bytes(payload)
-        packet_id = puback.packet_id
-        
-        assert client.session is not None
-        if packet_id in client.session.pending_outgoing:
-            del client.session.pending_outgoing[packet_id]
-            logger.debug(f"PUBACK received for packet {packet_id} from {client.client_id}")
-        else:
-            logger.warning(f"Unexpected PUBACK for packet {packet_id} from {client.client_id}")
-    
-    async def _handle_pubrec(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle PUBREC packet (QoS 2 step 2)."""
-        pubrec = PubrecPacket.from_bytes(payload)
-        packet_id = pubrec.packet_id
-        
-        assert client.session is not None
-        if packet_id in client.session.pending_outgoing:
-            client.session.pending_outgoing[packet_id].state = "pubrec_received"
-            await self._send_packet(client, PubrelPacket(packet_id).to_bytes())
-            logger.debug(f"PUBREC received, PUBREL sent for packet {packet_id}")
-        else:
-            logger.warning(f"Unexpected PUBREC for packet {packet_id} from {client.client_id}")
-    
-    async def _handle_pubrel(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle PUBREL packet (QoS 2 step 3)."""
-        pubrel = PubrelPacket.from_bytes(payload)
-        packet_id = pubrel.packet_id
-        
-        assert client.session is not None
-        if packet_id in client.session.pending_incoming_qos2:
-            client.session.pending_incoming_qos2.discard(packet_id)
-            await self._send_packet(client, PubcompPacket(packet_id).to_bytes())
-            logger.debug(f"PUBREL received, PUBCOMP sent for packet {packet_id}")
-        else:
-            # Still send PUBCOMP per spec
-            await self._send_packet(client, PubcompPacket(packet_id).to_bytes())
-            logger.warning(f"PUBREL for unknown packet {packet_id} from {client.client_id}")
-    
-    async def _handle_pubcomp(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle PUBCOMP packet (QoS 2 complete)."""
-        pubcomp = PubcompPacket.from_bytes(payload)
-        packet_id = pubcomp.packet_id
-        
-        assert client.session is not None
-        if packet_id in client.session.pending_outgoing:
-            del client.session.pending_outgoing[packet_id]
-            logger.debug(f"PUBCOMP received for packet {packet_id} from {client.client_id}")
-        else:
-            logger.warning(f"Unexpected PUBCOMP for packet {packet_id} from {client.client_id}")
-    
-    async def _handle_subscribe(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle SUBSCRIBE packet."""
-        try:
-            subscribe = SubscribePacket.from_bytes(payload)
-        except ProtocolError as e:
-            logger.warning(f"Invalid SUBSCRIBE from {client.client_id}: {e}")
-            await self._close_connection(client)
-            return
-        
-        return_codes = []
-        
-        assert client.session is not None
-        for topic_filter, requested_qos in subscribe.topics:
-            # Grant QoS (limited by broker's max QoS)
-            granted_qos = min(requested_qos, self.max_qos)
+            # Parse packet into appropriate packet object
+            packet = None
             
-            # Add subscription
-            client.session.add_subscription(topic_filter, granted_qos)
-            return_codes.append(granted_qos)
+            if packet_type == PacketType.PUBLISH:
+                packet = PublishPacket.from_bytes(flags, payload)
+            elif packet_type == PacketType.PUBACK:
+                packet = PubackPacket.from_bytes(payload)
+            elif packet_type == PacketType.PUBREC:
+                packet = PubrecPacket.from_bytes(payload)
+            elif packet_type == PacketType.PUBREL:
+                packet = PubrelPacket.from_bytes(payload)
+            elif packet_type == PacketType.PUBCOMP:
+                packet = PubcompPacket.from_bytes(payload)
+            elif packet_type == PacketType.SUBSCRIBE:
+                packet = SubscribePacket.from_bytes(payload)
+            elif packet_type == PacketType.UNSUBSCRIBE:
+                packet = UnsubscribePacket.from_bytes(payload)
+            elif packet_type == PacketType.PINGREQ:
+                packet = PingreqPacket.from_bytes(payload)
+            elif packet_type == PacketType.DISCONNECT:
+                packet = DisconnectPacket.from_bytes(payload)
+            else:
+                logger.warning(f"Unhandled packet type {packet_type} from {client.client_id}")
+                return
             
-            logger.debug(f"Client {client.client_id} subscribed to {topic_filter} with QoS {granted_qos}")
+            await packet.handle(self, client)
             
-            # Send retained messages for new subscription
-            retained = self.topic_manager.get_matching_retained_messages(
-                topic_filter, topic_matches_filter
-            )
-            for msg in retained:
-                # Use minimum of message QoS and granted QoS
-                effective_qos = min(msg.qos, granted_qos)
-                await self._send_publish(
-                    client, msg.topic, msg.payload, effective_qos, retain=True
-                )
-        
-        # Send SUBACK
-        await self._send_packet(client, SubackPacket(subscribe.packet_id, return_codes).to_bytes())
-    
-    async def _handle_unsubscribe(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle UNSUBSCRIBE packet."""
-        try:
-            unsubscribe = UnsubscribePacket.from_bytes(payload)
         except ProtocolError as e:
-            logger.warning(f"Invalid UNSUBSCRIBE from {client.client_id}: {e}")
+            logger.warning(f"Invalid {packet_type.name} from {client.client_id}: {e}")
             await self._close_connection(client)
-            return
-        
-        assert client.session is not None
-        for topic_filter in unsubscribe.topics:
-            client.session.remove_subscription(topic_filter)
-            logger.debug(f"Client {client.client_id} unsubscribed from {topic_filter}")
-        
-        # Send UNSUBACK
-        await self._send_packet(client, UnsubackPacket(unsubscribe.packet_id).to_bytes())
-    
-    async def _handle_pingreq(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle PINGREQ packet."""
-        await self._send_packet(client, PingrespPacket().to_bytes())
-        logger.debug(f"PINGRESP sent to {client.client_id}")
-    
-    async def _handle_disconnect(self, client: ClientConnection, flags: int, payload: bytes) -> None:
-        """Handle DISCONNECT packet."""
-        logger.info(f"Client {client.client_id} sent DISCONNECT")
-        # Clear will message (don't publish on clean disconnect)
-        client.will_message = None
-        client.connected = False
+
     
     async def _forward_publish(self, topic: str, payload: bytes, qos: int, retain: bool) -> None:
         """Forward a published message to all matching subscribers."""

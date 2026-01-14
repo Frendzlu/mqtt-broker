@@ -5,9 +5,12 @@ Handles packet parsing, encoding/decoding, and protocol validation.
 
 import struct
 from enum import IntEnum
-from typing import Optional, Tuple, List, Any
+from typing import Optional, Tuple, List, Any, TYPE_CHECKING
 from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
 
+if TYPE_CHECKING:
+    from .broker import ClientConnection, MQTTBroker
 
 class PacketType(IntEnum):
     """MQTT Control Packet Types"""
@@ -285,9 +288,23 @@ class Codec:
         return topic_idx == len(topic_levels)
 
 
-# =============================================================================
-# Packet Data Classes with from_bytes() and to_bytes() methods
-# =============================================================================
+class GenericPacket(ABC):
+    """
+    Abstract base class for all MQTT packets.
+    Strategy Pattern: Each packet type implements its own handling logic.
+    """
+    
+    @abstractmethod
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """
+        Handle this packet in the context of a broker and client connection.
+        
+        Args:
+            broker: The MQTT broker instance
+            client: The client connection that sent this packet
+        """
+        pass
+
 
 @dataclass
 class ConnectFlags:
@@ -428,7 +445,7 @@ class ConnackPacket:
 
 
 @dataclass
-class PublishPacket:
+class PublishPacket(GenericPacket):
     """PUBLISH packet for message delivery."""
     topic: str
     payload: bytes = b""
@@ -436,6 +453,37 @@ class PublishPacket:
     retain: bool = False
     dup: bool = False
     packet_id: Optional[int] = None  # None for QoS 0
+    flags_byte: int = 0  # Store flags for parsing
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle PUBLISH packet - Strategy Pattern implementation."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.debug(f"PUBLISH from {client.client_id}: topic={self.topic}, qos={self.qos}, retain={self.retain}")
+        
+        # Handle retained message
+        if self.retain:
+            broker.topic_manager.set_retained_message(
+                self.topic, self.payload, self.qos
+            )
+        
+        # Send acknowledgment based on QoS
+        if self.qos == 1:
+            # packet_id is always present for QoS > 0
+            assert self.packet_id is not None
+            await broker._send_packet(client, PubackPacket(self.packet_id).to_bytes())
+        elif self.qos == 2:
+            # packet_id is always present for QoS > 0
+            assert self.packet_id is not None
+            assert client.session is not None
+            # Store for duplicate detection
+            client.session.pending_incoming_qos2.add(self.packet_id)
+            await broker._send_packet(client, PubrecPacket(self.packet_id).to_bytes())
+            return  # Don't forward yet, wait for PUBREL
+        
+        # Forward to subscribers (QoS 0 and 1, or after PUBREL for QoS 2)
+        await broker._forward_publish(self.topic, self.payload, self.qos, self.retain)
 
     @classmethod
     def from_bytes(cls, flags: int, data: bytes) -> "PublishPacket":
@@ -485,6 +533,7 @@ class PublishPacket:
             retain=retain,
             dup=dup,
             packet_id=packet_id,
+            flags_byte=flags,
         )
 
     def to_bytes(self) -> bytes:
@@ -502,9 +551,21 @@ class PublishPacket:
 
 
 @dataclass
-class PubackPacket:
+class PubackPacket(GenericPacket):
     """PUBACK packet for QoS 1 acknowledgment."""
     packet_id: int
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle PUBACK packet - Strategy Pattern implementation."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        assert client.session is not None
+        if self.packet_id in client.session.pending_outgoing:
+            del client.session.pending_outgoing[self.packet_id]
+            logger.debug(f"PUBACK received for packet {self.packet_id} from {client.client_id}")
+        else:
+            logger.warning(f"Unexpected PUBACK for packet {self.packet_id} from {client.client_id}")
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "PubackPacket":
@@ -521,9 +582,22 @@ class PubackPacket:
 
 
 @dataclass
-class PubrecPacket:
+class PubrecPacket(GenericPacket):
     """PUBREC packet for QoS 2 (step 1 of 4-way handshake)."""
     packet_id: int
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle PUBREC packet - Strategy Pattern implementation."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        assert client.session is not None
+        if self.packet_id in client.session.pending_outgoing:
+            client.session.pending_outgoing[self.packet_id].state = "pubrec_received"
+            await broker._send_packet(client, PubrelPacket(self.packet_id).to_bytes())
+            logger.debug(f"PUBREC received, PUBREL sent for packet {self.packet_id}")
+        else:
+            logger.warning(f"Unexpected PUBREC for packet {self.packet_id} from {client.client_id}")
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "PubrecPacket":
@@ -540,9 +614,24 @@ class PubrecPacket:
 
 
 @dataclass
-class PubrelPacket:
+class PubrelPacket(GenericPacket):
     """PUBREL packet for QoS 2 (step 2 of 4-way handshake)."""
     packet_id: int
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle PUBREL packet - Strategy Pattern implementation."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        assert client.session is not None
+        if self.packet_id in client.session.pending_incoming_qos2:
+            client.session.pending_incoming_qos2.discard(self.packet_id)
+            await broker._send_packet(client, PubcompPacket(self.packet_id).to_bytes())
+            logger.debug(f"PUBREL received, PUBCOMP sent for packet {self.packet_id}")
+        else:
+            # Still send PUBCOMP per spec
+            await broker._send_packet(client, PubcompPacket(self.packet_id).to_bytes())
+            logger.warning(f"PUBREL for unknown packet {self.packet_id} from {client.client_id}")
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "PubrelPacket":
@@ -559,9 +648,21 @@ class PubrelPacket:
 
 
 @dataclass
-class PubcompPacket:
+class PubcompPacket(GenericPacket):
     """PUBCOMP packet for QoS 2 (step 3 of 4-way handshake)."""
     packet_id: int
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle PUBCOMP packet - Strategy Pattern implementation."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        assert client.session is not None
+        if self.packet_id in client.session.pending_outgoing:
+            del client.session.pending_outgoing[self.packet_id]
+            logger.debug(f"PUBCOMP received for packet {self.packet_id} from {client.client_id}")
+        else:
+            logger.warning(f"Unexpected PUBCOMP for packet {self.packet_id} from {client.client_id}")
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "PubcompPacket":
@@ -578,10 +679,43 @@ class PubcompPacket:
 
 
 @dataclass
-class SubscribePacket:
+class SubscribePacket(GenericPacket):
     """SUBSCRIBE packet for topic subscription."""
     packet_id: int
     topics: List[Tuple[str, int]] = field(default_factory=list)  # List of (topic_filter, requested_qos)
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle SUBSCRIBE packet - Strategy Pattern implementation."""
+        import logging
+        from .topics import topic_matches_filter
+        logger = logging.getLogger(__name__)
+        
+        return_codes = []
+        
+        assert client.session is not None
+        for topic_filter, requested_qos in self.topics:
+            # Grant QoS (limited by broker's max QoS)
+            granted_qos = min(requested_qos, broker.max_qos)
+            
+            # Add subscription
+            client.session.add_subscription(topic_filter, granted_qos)
+            return_codes.append(granted_qos)
+            
+            logger.debug(f"Client {client.client_id} subscribed to {topic_filter} with QoS {granted_qos}")
+            
+            # Send retained messages for new subscription
+            retained = broker.topic_manager.get_matching_retained_messages(
+                topic_filter, topic_matches_filter
+            )
+            for msg in retained:
+                # Use minimum of message QoS and granted QoS
+                effective_qos = min(msg.qos, granted_qos)
+                await broker._send_publish(
+                    client, msg.topic, msg.payload, effective_qos, retain=True
+                )
+        
+        # Send SUBACK
+        await broker._send_packet(client, SubackPacket(self.packet_id, return_codes).to_bytes())
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "SubscribePacket":
@@ -641,10 +775,23 @@ class SubackPacket:
 
 
 @dataclass
-class UnsubscribePacket:
+class UnsubscribePacket(GenericPacket):
     """UNSUBSCRIBE packet for topic unsubscription."""
     packet_id: int
     topics: List[str] = field(default_factory=list)
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle UNSUBSCRIBE packet - Strategy Pattern implementation."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        assert client.session is not None
+        for topic_filter in self.topics:
+            client.session.remove_subscription(topic_filter)
+            logger.debug(f"Client {client.client_id} unsubscribed from {topic_filter}")
+        
+        # Send UNSUBACK
+        await broker._send_packet(client, UnsubackPacket(self.packet_id).to_bytes())
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "UnsubscribePacket":
@@ -688,3 +835,41 @@ class PingrespPacket:
     def to_bytes(self) -> bytes:
         """Build PINGRESP packet."""
         return bytes([PacketType.PINGRESP << 4, 0x00])
+
+
+@dataclass
+class PingreqPacket(GenericPacket):
+    """PINGREQ packet for keep-alive ping."""
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle PINGREQ packet - Strategy Pattern implementation."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        await broker._send_packet(client, PingrespPacket().to_bytes())
+        logger.debug(f"PINGRESP sent to {client.client_id}")
+    
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "PingreqPacket":
+        """Parse PINGREQ packet - no payload."""
+        return cls()
+
+
+@dataclass
+class DisconnectPacket(GenericPacket):
+    """DISCONNECT packet for graceful client disconnection."""
+    
+    async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
+        """Handle DISCONNECT packet - Strategy Pattern implementation."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"Client {client.client_id} sent DISCONNECT")
+        # Clear will message (don't publish on clean disconnect)
+        client.will_message = None
+        client.connected = False
+    
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "DisconnectPacket":
+        """Parse DISCONNECT packet - no payload."""
+        return cls()

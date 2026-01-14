@@ -19,7 +19,7 @@ from .session import Session, SessionManager, WillMessage, PendingMessage
 from .topics import TopicManager, topic_matches_filter
 from .auth import AuthManager
 
-from MQTT3_1PacketFactory import MQTT3_1PacketFactory
+from .MQTT3_1PacketFactory import MQTT3_1PacketFactory
 
 
 logger = logging.getLogger(__name__)

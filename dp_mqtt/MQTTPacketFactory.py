@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from protocol import PacketType
-from broker import ClientConnection
+from .protocol import PacketType
+from .broker import ClientConnection
 
 class MQTTPacketFactory(ABC):
     @abstractmethod

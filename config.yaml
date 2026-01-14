@@ -21,6 +21,6 @@ authentication:
       # Password: subscriber456
 
 broker:
-  port: 1883  # IMPORTANT: If you change this, also update MQTT_PORT in .env file!
+  port: 1885  # IMPORTANT: If you change this, also update MQTT_PORT in .env file!
   host: 0.0.0.0
   max_qos: 2

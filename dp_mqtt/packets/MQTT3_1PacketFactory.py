@@ -1,6 +1,6 @@
 from typing import Optional
 from .MQTTPacketFactory import MQTTPacketFactory
-from .protocol import (
+from dp_mqtt.protocol import (
     PacketType,
     PublishPacket,
     PubackPacket,
@@ -11,14 +11,14 @@ from .protocol import (
     UnsubscribePacket,
     PingreqPacket,
     DisconnectPacket,
-    GenericPacket
+    Packet
 )
 
 class MQTT3_1PacketFactory(MQTTPacketFactory):
     def __init__(self):
         super().__init__()
 
-    def construct_packet(self, packet_type: PacketType, flags: int, payload: bytes) -> Optional[GenericPacket]:
+    def construct_packet(self, packet_type: PacketType, flags: int, payload: bytes) -> Optional[Packet]:
         if packet_type == PacketType.PUBLISH:
             packet = PublishPacket.from_bytes(flags, payload)
         elif packet_type == PacketType.PUBACK:

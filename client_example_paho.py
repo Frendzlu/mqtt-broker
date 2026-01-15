@@ -16,7 +16,7 @@ import time
 
 # Configuration
 BROKER_HOST = "localhost"
-BROKER_PORT = 1883
+BROKER_PORT = 1885
 USERNAME = "admin"
 PASSWORD = "admin"
 

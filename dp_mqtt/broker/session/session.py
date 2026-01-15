@@ -1,41 +1,7 @@
-"""
-MQTT Client Session Management
-Handles session state, subscriptions, and message queuing.
-"""
-
-import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple, Any
-from enum import IntEnum
+from typing import Dict, Optional, Set
 
-
-class QoSLevel(IntEnum):
-    AT_MOST_ONCE = 0
-    AT_LEAST_ONCE = 1
-    EXACTLY_ONCE = 2
-
-
-@dataclass
-class WillMessage:
-    """Client's Will message to be published on unexpected disconnect."""
-    topic: str
-    payload: bytes
-    qos: int
-    retain: bool
-
-
-@dataclass
-class PendingMessage:
-    """Message pending acknowledgment (for QoS 1 and 2)."""
-    packet_id: int
-    topic: str
-    payload: bytes
-    qos: int
-    retain: bool
-    timestamp: float
-    retry_count: int = 0
-    state: str = "pending"  # pending, pubrec_received (for QoS 2)
-
+from .pending_message import PendingMessage
 
 @dataclass
 class Session:
@@ -96,39 +62,3 @@ class Session:
         self.pending_outgoing.clear()
         self.pending_incoming_qos2.clear()
         self.next_packet_id = 1
-
-
-class SessionManager:
-    """Manages all client sessions."""
-    
-    def __init__(self):
-        self.sessions: Dict[str, Session] = {}
-    
-    def get_or_create_session(self, client_id: str, clean_session: bool) -> Tuple[Session, bool]:
-        """
-        Get existing session or create new one.
-        Returns (session, session_present).
-        If clean_session is True, any existing session is cleared.
-        """
-        session_present = False
-        
-        if client_id in self.sessions:
-            session = self.sessions[client_id]
-            if clean_session:
-                session.clear()
-            else:
-                session_present = True
-        else:
-            session = Session(client_id=client_id)
-            self.sessions[client_id] = session
-        
-        return session, session_present
-    
-    def remove_session(self, client_id: str) -> None:
-        """Remove a session completely."""
-        if client_id in self.sessions:
-            del self.sessions[client_id]
-    
-    def has_session(self, client_id: str) -> bool:
-        """Check if a session exists."""
-        return client_id in self.sessions

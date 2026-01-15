@@ -1,33 +1,15 @@
-"""
-Authentication module for MQTT broker.
-Supports username/password authentication from config file.
-"""
+import hashlib
+from pathlib import Path
+from typing import Dict, Optional
 
 import yaml
-import hashlib
-import secrets
-from pathlib import Path
-from typing import Optional, Dict, List, Tuple
-from dataclasses import dataclass
+
+from dp_mqtt.auth.user import User
+from dp_mqtt.broker.broker_config import BrokerConfig
+
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class User:
-    """Represents an authenticated user."""
-    username: str
-    password_hash: str
-    allowed_topics: Optional[List[str]] = None  # Future: topic-level ACL
-
-
-@dataclass
-class BrokerConfig:
-    """Broker configuration settings."""
-    host: str = "0.0.0.0"
-    port: int = 1883
-    max_qos: int = 2
 
 
 class AuthManager:

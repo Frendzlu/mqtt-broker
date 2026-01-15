@@ -9,35 +9,30 @@ import time
 from typing import Dict, Optional, Set
 from dataclasses import dataclass
 
-from .protocol import (
-    PacketType, ConnectReturnCode, ProtocolError, MalformedPacketError,
-    Codec, ConnectPacket, PublishPacket, SubscribePacket, UnsubscribePacket,
-    ConnackPacket, PubackPacket, PubrecPacket, PubrelPacket, PubcompPacket,
-    SubackPacket, UnsubackPacket, PingrespPacket, PingreqPacket, DisconnectPacket,
-)
-from .session import Session, SessionManager, WillMessage, PendingMessage
-from .topics import TopicManager, topic_matches_filter
-from .auth import AuthManager
+from dp_mqtt.broker.client_connection import ClientConnection
+from dp_mqtt.protocol.topic_utils import TopicUtils
 
-from .MQTT3_1PacketFactory import MQTT3_1PacketFactory
+from .protocol.packet_type import PacketType
+from .protocol.connect_return_code import ConnectReturnCode
+from .protocol.protocol_error import ProtocolError
+from .protocol.malformed_packet_error import MalformedPacketError
+from .protocol.codec import Codec
+from .packets.connect_packet import ConnectPacket
+from .packets.publish_packet import PublishPacket
+from .packets.connack_packet import ConnackPacket
+from .packets.pubrel_packet import PubrelPacket
+
+from .broker.session.session import Session
+from .broker.session.session_mananger import SessionManager
+from .broker.session.pending_message import PendingMessage
+from .broker.session.will_message import WillMessage
+from .broker.topics.topic_manager import TopicManager
+from .auth.auth_manager import AuthManager
+
+from .packets.MQTT3_1PacketFactory import MQTT3_1PacketFactory
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ClientConnection:
-    """Represents an active client connection."""
-    reader: asyncio.StreamReader
-    writer: asyncio.StreamWriter
-    client_id: Optional[str] = None
-    session: Optional[Session] = None
-    connected: bool = False
-    keep_alive: int = 0
-    last_activity: float = 0
-    will_message: Optional[WillMessage] = None
-    clean_session: bool = True
-    address: str = ""
 
 
 class MQTTBroker:
@@ -337,7 +332,7 @@ class MQTTBroker:
                 continue
             
             # Check if any subscription matches
-            matching_qos = client.session.get_matching_qos(topic, topic_matches_filter)
+            matching_qos = client.session.get_matching_qos(topic, TopicUtils.topic_matches_filter)
             if matching_qos is not None:
                 # Use minimum of publish QoS and subscription QoS
                 effective_qos = min(qos, matching_qos)

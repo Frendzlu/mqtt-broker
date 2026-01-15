@@ -70,7 +70,7 @@ async def main():
         
         # Wait for messages
         print("\nListening for messages (5 seconds)...")
-        await asyncio.sleep(5)
+        await asyncio.sleep(20)
         
         # Disconnect
         print("\nDisconnecting...")

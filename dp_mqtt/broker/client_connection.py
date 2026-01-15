@@ -2,9 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Optional
 
-from .session.will_message import WillMessage
-
-from .session import Session
+from .session import WillMessage, Session
 
 
 @dataclass

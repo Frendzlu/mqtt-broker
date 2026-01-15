@@ -4,8 +4,8 @@ from typing import Dict, Optional
 
 import yaml
 
-from dp_mqtt.auth.user import User
-from dp_mqtt.broker.broker_config import BrokerConfig
+from ..auth.user import User
+from ..broker.broker_config import BrokerConfig
 
 import logging
 
@@ -155,7 +155,7 @@ class AuthManager:
         Generate a password hash for use in config file.
         
         Usage:
-            from dp_mqtt.auth import AuthManager
+            from ..auth import AuthManager
             print(AuthManager.generate_password_hash("mypassword"))
         """
         return f"sha256:{hashlib.sha256(password.encode('utf-8')).hexdigest()}"

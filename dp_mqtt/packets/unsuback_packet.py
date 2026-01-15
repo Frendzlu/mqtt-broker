@@ -3,8 +3,8 @@
 import struct
 from dataclasses import dataclass
 
-from dp_mqtt.protocol.codec import Codec
-from dp_mqtt.protocol.packet_type import PacketType
+from ..protocol.codec import Codec
+from ..protocol.packet_type import PacketType
 
 
 @dataclass

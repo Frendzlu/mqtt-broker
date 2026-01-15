@@ -3,17 +3,17 @@ import struct
 from typing import Optional
 from typing import TYPE_CHECKING
 
-from dp_mqtt.packets.puback_packet import PubackPacket
-from dp_mqtt.packets.pubrec_packet import PubrecPacket
+from .puback_packet import PubackPacket
+from .pubrec_packet import PubrecPacket
 
 if TYPE_CHECKING:
     from dp_mqtt.broker import ClientConnection, MQTTBroker
 
-from dp_mqtt.packets.packet import Packet
-from dp_mqtt.protocol.malformed_packet_error import MalformedPacketError
-from dp_mqtt.protocol.packet_type import PacketType
-from dp_mqtt.protocol.protocol_error import ProtocolError
-from dp_mqtt.protocol.codec import Codec
+from .packet import Packet
+from ..protocol.malformed_packet_error import MalformedPacketError
+from ..protocol.packet_type import PacketType
+from ..protocol.protocol_error import ProtocolError
+from ..protocol.codec import Codec
 
 
 @dataclass

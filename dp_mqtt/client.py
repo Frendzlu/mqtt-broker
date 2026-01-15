@@ -15,7 +15,10 @@ from enum import IntEnum
 
 from .protocol import (
     PacketType, ConnectReturnCode, ProtocolError, MalformedPacketError,
-    Codec, PublishPacket, PubackPacket, PubrecPacket, PubrelPacket, PubcompPacket,
+    Codec,
+)
+from .packets import (
+    PublishPacket, PubackPacket, PubrecPacket, PubrelPacket, PubcompPacket,
 )
 
 

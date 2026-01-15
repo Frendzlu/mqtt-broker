@@ -1,7 +1,7 @@
 from typing import Optional
 from .MQTTPacketFactory import MQTTPacketFactory
-from dp_mqtt.protocol import (
-    PacketType,
+from ..protocol import PacketType
+from . import (
     PublishPacket,
     PubackPacket,
     PubrecPacket,

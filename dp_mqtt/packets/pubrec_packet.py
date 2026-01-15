@@ -2,15 +2,15 @@ from dataclasses import dataclass
 import struct
 from typing import TYPE_CHECKING
 
-from dp_mqtt.packets.pubrel_packet import PubrelPacket
-from dp_mqtt.protocol.malformed_packet_error import MalformedPacketError
-from dp_mqtt.protocol.packet_type import PacketType
-from dp_mqtt.protocol.codec import Codec
+from .pubrel_packet import PubrelPacket
+from ..protocol.malformed_packet_error import MalformedPacketError
+from ..protocol.packet_type import PacketType
+from ..protocol.codec import Codec
 
 if TYPE_CHECKING:
     from dp_mqtt.broker import ClientConnection, MQTTBroker
     
-from dp_mqtt.packets.packet import Packet
+from .packet import Packet
 
 
 @dataclass

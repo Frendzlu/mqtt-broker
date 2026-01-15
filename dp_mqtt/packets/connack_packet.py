@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from dp_mqtt.protocol.connect_return_code import ConnectReturnCode
-from dp_mqtt.protocol.packet_type import PacketType
-from dp_mqtt.protocol.codec import Codec
+from ..protocol.connect_return_code import ConnectReturnCode
+from ..protocol.packet_type import PacketType
+from ..protocol.codec import Codec
 
 
 @dataclass

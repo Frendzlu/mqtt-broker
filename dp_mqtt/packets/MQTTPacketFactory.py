@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
-from dp_mqtt.protocol import Packet, PacketType
+from .packet import Packet
+from ..protocol.packet_type import PacketType
 
 class MQTTPacketFactory(ABC):
     """Abstract factory for creating MQTT packet instances."""

@@ -3,12 +3,12 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from dp_mqtt.packets.packet import Packet
+from .packet import Packet
 
 if TYPE_CHECKING:
     from dp_mqtt.broker import ClientConnection, MQTTBroker
 
-from dp_mqtt.packets.pingresp_packet import PingrespPacket
+from .pingresp_packet import PingrespPacket
 
 
 @dataclass

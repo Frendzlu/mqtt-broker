@@ -6,12 +6,20 @@ from .broker import MQTTBroker, run_broker
 from .client import Client, MQTTMessage, MQTTError, setup_client_logging
 from .protocol import (
     PacketType, ConnectReturnCode, ProtocolError, MalformedPacketError,
-    Codec, ConnectPacket, ConnackPacket, PublishPacket, SubscribePacket,
+    Codec, ConnectFlags, QoSLevel, TopicUtils
+)
+from .packets import (
+    Packet, ConnectPacket, ConnackPacket, PublishPacket, SubscribePacket,
     SubackPacket, UnsubscribePacket, UnsubackPacket,
     PubackPacket, PubrecPacket, PubrelPacket, PubcompPacket, PingrespPacket,
 )
-from .session import Session, SessionManager, WillMessage
-from .topics import TopicManager, topic_matches_filter
+from .broker.session import Session, SessionManager, WillMessage
+from .broker.topics import TopicManager, RetainedMessage
+
+# Helper function for topic matching
+def topic_matches_filter(topic: str, filter_pattern: str) -> bool:
+    """Check if a topic name matches a topic filter pattern."""
+    return TopicUtils.topic_matches_filter(topic, filter_pattern)
 
 __version__ = "0.1.0"
 __all__ = [
@@ -29,6 +37,11 @@ __all__ = [
     "ProtocolError",
     "MalformedPacketError",
     "Codec",
+    "ConnectFlags",
+    "QoSLevel",
+    "TopicUtils",
+    # Packets
+    "Packet",
     "ConnectPacket",
     "ConnackPacket",
     "PublishPacket",
@@ -47,5 +60,6 @@ __all__ = [
     "WillMessage",
     # Topics
     "TopicManager",
+    "RetainedMessage",
     "topic_matches_filter",
 ]

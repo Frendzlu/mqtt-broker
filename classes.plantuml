@@ -92,11 +92,8 @@ class "DisconnectPacket" as dp_mqtt.protocol.DisconnectPacket {
   from_bytes(data: bytes) -> 'DisconnectPacket'
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
 }
-class "GenericPacket" as dp_mqtt.protocol.GenericPacket {
-  {abstract}handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
-}
 class "MQTT3_1PacketFactory" as dp_mqtt.MQTT3_1PacketFactory.MQTT3_1PacketFactory {
-  construct_packet(client: ClientConnection, packet_type: PacketType, flags: int, payload: bytes)
+  construct_packet(packet_type: PacketType, flags: int, payload: bytes) -> Optional[Packet]
 }
 class "MQTTBroker" as dp_mqtt.broker.MQTTBroker {
   auth_manager
@@ -137,9 +134,12 @@ class "MQTTMessage" as dp_mqtt.client.MQTTMessage {
   topic : str
 }
 class "MQTTPacketFactory" as dp_mqtt.MQTTPacketFactory.MQTTPacketFactory {
-  {abstract}construct_packet(client: ClientConnection, packet_type: PacketType, flags: int, payload: bytes)
+  {abstract}construct_packet(packet_type: PacketType, flags: int, payload: bytes) -> Optional[Packet]
 }
 class "<color:red>MalformedPacketError</color>" as dp_mqtt.protocol.MalformedPacketError {
+}
+class "Packet" as dp_mqtt.protocol.Packet {
+  {abstract}handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
 }
 class "PacketType" as dp_mqtt.protocol.PacketType {
   name
@@ -265,23 +265,25 @@ class "WillMessage" as dp_mqtt.session.WillMessage {
   retain : bool
   topic : str
 }
+dp_mqtt.MQTT3_1PacketFactory.MQTT3_1PacketFactory --|> dp_mqtt.MQTTPacketFactory.MQTTPacketFactory
 dp_mqtt.client.ConnectionError --|> dp_mqtt.client.MQTTError
-dp_mqtt.protocol.DisconnectPacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.DisconnectPacket --|> dp_mqtt.protocol.Packet
 dp_mqtt.protocol.MalformedPacketError --|> dp_mqtt.protocol.ProtocolError
-dp_mqtt.protocol.PingreqPacket --|> dp_mqtt.protocol.GenericPacket
-dp_mqtt.protocol.PubackPacket --|> dp_mqtt.protocol.GenericPacket
-dp_mqtt.protocol.PubcompPacket --|> dp_mqtt.protocol.GenericPacket
-dp_mqtt.protocol.PublishPacket --|> dp_mqtt.protocol.GenericPacket
-dp_mqtt.protocol.PubrecPacket --|> dp_mqtt.protocol.GenericPacket
-dp_mqtt.protocol.PubrelPacket --|> dp_mqtt.protocol.GenericPacket
-dp_mqtt.protocol.SubscribePacket --|> dp_mqtt.protocol.GenericPacket
-dp_mqtt.protocol.UnsubscribePacket --|> dp_mqtt.protocol.GenericPacket
+dp_mqtt.protocol.PingreqPacket --|> dp_mqtt.protocol.Packet
+dp_mqtt.protocol.PubackPacket --|> dp_mqtt.protocol.Packet
+dp_mqtt.protocol.PubcompPacket --|> dp_mqtt.protocol.Packet
+dp_mqtt.protocol.PublishPacket --|> dp_mqtt.protocol.Packet
+dp_mqtt.protocol.PubrecPacket --|> dp_mqtt.protocol.Packet
+dp_mqtt.protocol.PubrelPacket --|> dp_mqtt.protocol.Packet
+dp_mqtt.protocol.SubscribePacket --|> dp_mqtt.protocol.Packet
+dp_mqtt.protocol.UnsubscribePacket --|> dp_mqtt.protocol.Packet
 dp_mqtt.auth.AuthManager --> dp_mqtt.auth.User : users
 dp_mqtt.broker.MQTTBroker --> dp_mqtt.broker.ClientConnection : clients
 dp_mqtt.protocol.ConnectPacket --> dp_mqtt.protocol.ConnectFlags : flags
 dp_mqtt.protocol.ConnackPacket --> dp_mqtt.protocol.ConnectReturnCode : return_code
 dp_mqtt.session.SessionManager --> dp_mqtt.session.Session : sessions
 dp_mqtt.topics.TopicManager --> dp_mqtt.topics.RetainedMessage : retained_messages
+dp_mqtt.MQTT3_1PacketFactory.MQTT3_1PacketFactory --* dp_mqtt.broker.MQTTBroker : factory
 dp_mqtt.auth.AuthManager --* dp_mqtt.broker.MQTTBroker : auth_manager
 dp_mqtt.auth.BrokerConfig --* dp_mqtt.auth.AuthManager : broker_config
 dp_mqtt.client.MQTTClientConfig --* dp_mqtt.client.Client : config

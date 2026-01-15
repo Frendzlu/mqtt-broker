@@ -26,9 +26,7 @@ dp_mqtt --> dp_mqtt.protocol
 dp_mqtt --> dp_mqtt.session
 dp_mqtt --> dp_mqtt.topics
 dp_mqtt.MQTT3_1PacketFactory --> dp_mqtt.MQTTPacketFactory
-dp_mqtt.MQTT3_1PacketFactory --> dp_mqtt.broker
 dp_mqtt.MQTT3_1PacketFactory --> dp_mqtt.protocol
-dp_mqtt.MQTTPacketFactory --> dp_mqtt.broker
 dp_mqtt.MQTTPacketFactory --> dp_mqtt.protocol
 dp_mqtt.__main__ --> dp_mqtt.broker
 dp_mqtt.broker --> dp_mqtt.MQTT3_1PacketFactory

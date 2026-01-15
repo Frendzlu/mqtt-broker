@@ -1,14 +1,12 @@
 from dataclasses import dataclass, field
 import struct
-from typing import List, Tuple
+from typing import List, Tuple, TYPE_CHECKING
 
-from dp_mqtt.packets.packet import Packet
-from typing import TYPE_CHECKING
-
-from dp_mqtt.protocol import SubackPacket
-from dp_mqtt.protocol.malformed_packet_error import MalformedPacketError
-from dp_mqtt.protocol.protocol_error import ProtocolError
-from dp_mqtt.protocol.codec import Codec
+from .packet import Packet
+from .suback_packet import SubackPacket
+from ..protocol.malformed_packet_error import MalformedPacketError
+from ..protocol.protocol_error import ProtocolError
+from ..protocol.codec import Codec
 if TYPE_CHECKING:
     from dp_mqtt.broker import ClientConnection, MQTTBroker
 
@@ -22,7 +20,7 @@ class SubscribePacket(Packet):
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
         """Handle SUBSCRIBE packet."""
         import logging
-        from dp_mqtt.broker.topics import topic_matches_filter
+        from ..broker.topics import topic_matches_filter
         logger = logging.getLogger(__name__)
         
         return_codes = []

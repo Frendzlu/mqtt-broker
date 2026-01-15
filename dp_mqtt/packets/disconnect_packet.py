@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from dp_mqtt.packets.packet import Packet
+from .packet import Packet
 
 if TYPE_CHECKING:
     from dp_mqtt.broker import ClientConnection, MQTTBroker

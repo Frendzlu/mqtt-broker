@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from dp_mqtt.protocol.packet_type import PacketType
+from ..protocol.packet_type import PacketType
 
 
 @dataclass

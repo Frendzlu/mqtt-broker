@@ -1,8 +1,8 @@
 # Expected flags for each packet type (None means variable flags like PUBLISH)
 import struct
 from typing import Tuple
-from dp_mqtt.protocol.malformed_packet_error import MalformedPacketError
-from dp_mqtt.protocol.protocol_error import ProtocolError
+from .malformed_packet_error import MalformedPacketError
+from .protocol_error import ProtocolError
 from .packet_type import PacketType
 
 

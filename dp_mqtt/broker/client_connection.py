@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Optional
 
-from .session import WillMessage, Session
+from dp_mqtt.session import WillMessage, Session
 
 
 @dataclass

@@ -1,17 +1,15 @@
 """
-MQTT 3.1.1 Client Implementation
-Provides a paho-mqtt-like API for connecting to MQTT brokers.
+MQTT Client Package
 """
 
 import logging
 import os
 from datetime import datetime
 
-# Re-export all client components for backward compatibility
-from .client.client_impl import Client
-from .client.message import MQTTMessage
-from .client.errors import MQTTError, ConnectionError
-from .client.config import MQTTClientConfig
+from .client_impl import Client
+from .message import MQTTMessage
+from .errors import MQTTError, ConnectionError
+from .config import MQTTClientConfig
 
 
 logger = logging.getLogger(__name__)

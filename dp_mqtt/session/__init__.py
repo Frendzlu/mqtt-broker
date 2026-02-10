@@ -4,7 +4,7 @@ Handles client sessions, subscriptions, and message queuing.
 """
 
 from .session import Session
-from .session_mananger import SessionManager
+from .session_manager import SessionManager
 from .will_message import WillMessage
 from .pending_message import PendingMessage
 

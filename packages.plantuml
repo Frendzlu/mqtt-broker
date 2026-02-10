@@ -2,19 +2,99 @@
 set namespaceSeparator none
 package "dp_mqtt" as dp_mqtt {
 }
-package "dp_mqtt.MQTT3_1PacketFactory" as dp_mqtt.MQTT3_1PacketFactory {
-}
-package "dp_mqtt.MQTTPacketFactory" as dp_mqtt.MQTTPacketFactory {
-}
 package "dp_mqtt.__main__" as dp_mqtt.__main__ {
 }
 package "dp_mqtt.auth" as dp_mqtt.auth {
 }
+package "dp_mqtt.auth.auth_manager" as dp_mqtt.auth.auth_manager {
+}
+package "dp_mqtt.auth.user" as dp_mqtt.auth.user {
+}
 package "dp_mqtt.broker" as dp_mqtt.broker {
+}
+package "dp_mqtt.broker.broker_config" as dp_mqtt.broker.broker_config {
+}
+package "dp_mqtt.broker.client_connection" as dp_mqtt.broker.client_connection {
+}
+package "dp_mqtt.broker.session" as dp_mqtt.broker.session {
+}
+package "dp_mqtt.broker.session.pending_message" as dp_mqtt.broker.session.pending_message {
+}
+package "dp_mqtt.broker.session.session" as dp_mqtt.broker.session.session {
+}
+package "dp_mqtt.broker.session.session_mananger" as dp_mqtt.broker.session.session_mananger {
+}
+package "dp_mqtt.broker.session.will_message" as dp_mqtt.broker.session.will_message {
+}
+package "dp_mqtt.broker.topics" as dp_mqtt.broker.topics {
+}
+package "dp_mqtt.broker.topics.retained_message" as dp_mqtt.broker.topics.retained_message {
+}
+package "dp_mqtt.broker.topics.topic_manager" as dp_mqtt.broker.topics.topic_manager {
 }
 package "dp_mqtt.client" as dp_mqtt.client {
 }
+package "dp_mqtt.client.client_impl" as dp_mqtt.client.client_impl {
+}
+package "dp_mqtt.client.config" as dp_mqtt.client.config {
+}
+package "dp_mqtt.client.errors" as dp_mqtt.client.errors {
+}
+package "dp_mqtt.client.message" as dp_mqtt.client.message {
+}
+package "dp_mqtt.packets" as dp_mqtt.packets {
+}
+package "dp_mqtt.packets.MQTT3_1PacketFactory" as dp_mqtt.packets.MQTT3_1PacketFactory {
+}
+package "dp_mqtt.packets.MQTTPacketFactory" as dp_mqtt.packets.MQTTPacketFactory {
+}
+package "dp_mqtt.packets.connack_packet" as dp_mqtt.packets.connack_packet {
+}
+package "dp_mqtt.packets.connect_packet" as dp_mqtt.packets.connect_packet {
+}
+package "dp_mqtt.packets.disconnect_packet" as dp_mqtt.packets.disconnect_packet {
+}
+package "dp_mqtt.packets.packet" as dp_mqtt.packets.packet {
+}
+package "dp_mqtt.packets.pingreq_packet" as dp_mqtt.packets.pingreq_packet {
+}
+package "dp_mqtt.packets.pingresp_packet" as dp_mqtt.packets.pingresp_packet {
+}
+package "dp_mqtt.packets.puback_packet" as dp_mqtt.packets.puback_packet {
+}
+package "dp_mqtt.packets.pubcomp_packet" as dp_mqtt.packets.pubcomp_packet {
+}
+package "dp_mqtt.packets.publish_packet" as dp_mqtt.packets.publish_packet {
+}
+package "dp_mqtt.packets.pubrec_packet" as dp_mqtt.packets.pubrec_packet {
+}
+package "dp_mqtt.packets.pubrel_packet" as dp_mqtt.packets.pubrel_packet {
+}
+package "dp_mqtt.packets.suback_packet" as dp_mqtt.packets.suback_packet {
+}
+package "dp_mqtt.packets.subscribe_packet" as dp_mqtt.packets.subscribe_packet {
+}
+package "dp_mqtt.packets.unsuback_packet" as dp_mqtt.packets.unsuback_packet {
+}
+package "dp_mqtt.packets.unsubscribe_packet" as dp_mqtt.packets.unsubscribe_packet {
+}
 package "dp_mqtt.protocol" as dp_mqtt.protocol {
+}
+package "dp_mqtt.protocol.codec" as dp_mqtt.protocol.codec {
+}
+package "dp_mqtt.protocol.connect_flags" as dp_mqtt.protocol.connect_flags {
+}
+package "dp_mqtt.protocol.connect_return_code" as dp_mqtt.protocol.connect_return_code {
+}
+package "dp_mqtt.protocol.malformed_packet_error" as dp_mqtt.protocol.malformed_packet_error {
+}
+package "dp_mqtt.protocol.packet_type" as dp_mqtt.protocol.packet_type {
+}
+package "dp_mqtt.protocol.protocol_error" as dp_mqtt.protocol.protocol_error {
+}
+package "dp_mqtt.protocol.qos_level" as dp_mqtt.protocol.qos_level {
+}
+package "dp_mqtt.protocol.topic_utils" as dp_mqtt.protocol.topic_utils {
 }
 package "dp_mqtt.session" as dp_mqtt.session {
 }
@@ -22,19 +102,94 @@ package "dp_mqtt.topics" as dp_mqtt.topics {
 }
 dp_mqtt --> dp_mqtt.broker
 dp_mqtt --> dp_mqtt.client
+dp_mqtt --> dp_mqtt.packets
 dp_mqtt --> dp_mqtt.protocol
 dp_mqtt --> dp_mqtt.session
 dp_mqtt --> dp_mqtt.topics
-dp_mqtt.MQTT3_1PacketFactory --> dp_mqtt.MQTTPacketFactory
-dp_mqtt.MQTT3_1PacketFactory --> dp_mqtt.protocol
-dp_mqtt.MQTTPacketFactory --> dp_mqtt.protocol
 dp_mqtt.__main__ --> dp_mqtt.broker
-dp_mqtt.broker --> dp_mqtt.MQTT3_1PacketFactory
-dp_mqtt.broker --> dp_mqtt.auth
-dp_mqtt.broker --> dp_mqtt.protocol
+dp_mqtt.broker --> dp_mqtt.auth.auth_manager
+dp_mqtt.broker --> dp_mqtt.broker.client_connection
+dp_mqtt.broker --> dp_mqtt.packets.MQTT3_1PacketFactory
+dp_mqtt.broker --> dp_mqtt.packets.connack_packet
+dp_mqtt.broker --> dp_mqtt.packets.connect_packet
+dp_mqtt.broker --> dp_mqtt.packets.publish_packet
+dp_mqtt.broker --> dp_mqtt.packets.pubrel_packet
+dp_mqtt.broker --> dp_mqtt.protocol.codec
+dp_mqtt.broker --> dp_mqtt.protocol.connect_return_code
+dp_mqtt.broker --> dp_mqtt.protocol.malformed_packet_error
+dp_mqtt.broker --> dp_mqtt.protocol.packet_type
+dp_mqtt.broker --> dp_mqtt.protocol.protocol_error
+dp_mqtt.broker --> dp_mqtt.protocol.topic_utils
 dp_mqtt.broker --> dp_mqtt.session
 dp_mqtt.broker --> dp_mqtt.topics
-dp_mqtt.client --> dp_mqtt.protocol
-dp_mqtt.protocol --> dp_mqtt.topics
-dp_mqtt.protocol ..> dp_mqtt.broker
+dp_mqtt.broker.client_connection --> dp_mqtt.broker.session
+dp_mqtt.broker.session --> dp_mqtt.broker.session.session
+dp_mqtt.broker.session.session --> dp_mqtt.broker.session.pending_message
+dp_mqtt.broker.session.session_mananger --> dp_mqtt.broker.session.session
+dp_mqtt.broker.topics --> dp_mqtt.broker.topics
+dp_mqtt.broker.topics.topic_manager --> dp_mqtt.broker.topics.retained_message
+dp_mqtt.client --> dp_mqtt.client.client_impl
+dp_mqtt.client --> dp_mqtt.client.config
+dp_mqtt.client --> dp_mqtt.client.errors
+dp_mqtt.client --> dp_mqtt.client.message
+dp_mqtt.client.client_impl --> dp_mqtt.client.config
+dp_mqtt.client.client_impl --> dp_mqtt.client.errors
+dp_mqtt.client.client_impl --> dp_mqtt.client.message
+dp_mqtt.packets --> dp_mqtt.packets.MQTT3_1PacketFactory
+dp_mqtt.packets --> dp_mqtt.packets.MQTTPacketFactory
+dp_mqtt.packets --> dp_mqtt.packets.connack_packet
+dp_mqtt.packets --> dp_mqtt.packets.connect_packet
+dp_mqtt.packets --> dp_mqtt.packets.disconnect_packet
+dp_mqtt.packets --> dp_mqtt.packets.packet
+dp_mqtt.packets --> dp_mqtt.packets.pingreq_packet
+dp_mqtt.packets --> dp_mqtt.packets.pingresp_packet
+dp_mqtt.packets --> dp_mqtt.packets.puback_packet
+dp_mqtt.packets --> dp_mqtt.packets.pubcomp_packet
+dp_mqtt.packets --> dp_mqtt.packets.publish_packet
+dp_mqtt.packets --> dp_mqtt.packets.pubrec_packet
+dp_mqtt.packets --> dp_mqtt.packets.pubrel_packet
+dp_mqtt.packets --> dp_mqtt.packets.suback_packet
+dp_mqtt.packets --> dp_mqtt.packets.subscribe_packet
+dp_mqtt.packets --> dp_mqtt.packets.unsuback_packet
+dp_mqtt.packets --> dp_mqtt.packets.unsubscribe_packet
+dp_mqtt.packets.MQTT3_1PacketFactory --> dp_mqtt.packets.MQTTPacketFactory
+dp_mqtt.packets.MQTTPacketFactory --> dp_mqtt.packets.packet
+dp_mqtt.packets.disconnect_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.pingreq_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.pingreq_packet --> dp_mqtt.packets.pingresp_packet
+dp_mqtt.packets.puback_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.pubcomp_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.publish_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.publish_packet --> dp_mqtt.packets.puback_packet
+dp_mqtt.packets.publish_packet --> dp_mqtt.packets.pubrec_packet
+dp_mqtt.packets.pubrec_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.pubrec_packet --> dp_mqtt.packets.pubrel_packet
+dp_mqtt.packets.pubrel_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.pubrel_packet --> dp_mqtt.packets.pubcomp_packet
+dp_mqtt.packets.subscribe_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.subscribe_packet --> dp_mqtt.packets.suback_packet
+dp_mqtt.packets.unsubscribe_packet --> dp_mqtt.packets.packet
+dp_mqtt.packets.unsubscribe_packet --> dp_mqtt.packets.unsuback_packet
+dp_mqtt.protocol --> dp_mqtt.protocol.codec
+dp_mqtt.protocol --> dp_mqtt.protocol.connect_flags
+dp_mqtt.protocol --> dp_mqtt.protocol.connect_return_code
+dp_mqtt.protocol --> dp_mqtt.protocol.malformed_packet_error
+dp_mqtt.protocol --> dp_mqtt.protocol.packet_type
+dp_mqtt.protocol --> dp_mqtt.protocol.protocol_error
+dp_mqtt.protocol --> dp_mqtt.protocol.qos_level
+dp_mqtt.protocol --> dp_mqtt.protocol.topic_utils
+dp_mqtt.protocol.codec --> dp_mqtt.protocol.malformed_packet_error
+dp_mqtt.protocol.codec --> dp_mqtt.protocol.packet_type
+dp_mqtt.protocol.codec --> dp_mqtt.protocol.protocol_error
+dp_mqtt.protocol.malformed_packet_error --> dp_mqtt.protocol.protocol_error
+dp_mqtt.packets.disconnect_packet ..> dp_mqtt.broker
+dp_mqtt.packets.packet ..> dp_mqtt.broker
+dp_mqtt.packets.pingreq_packet ..> dp_mqtt.broker
+dp_mqtt.packets.puback_packet ..> dp_mqtt.broker
+dp_mqtt.packets.pubcomp_packet ..> dp_mqtt.broker
+dp_mqtt.packets.publish_packet ..> dp_mqtt.broker
+dp_mqtt.packets.pubrec_packet ..> dp_mqtt.broker
+dp_mqtt.packets.pubrel_packet ..> dp_mqtt.broker
+dp_mqtt.packets.subscribe_packet ..> dp_mqtt.broker
+dp_mqtt.packets.unsubscribe_packet ..> dp_mqtt.broker
 @enduml

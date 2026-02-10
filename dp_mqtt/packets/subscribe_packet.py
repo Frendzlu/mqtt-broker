@@ -20,7 +20,7 @@ class SubscribePacket(Packet):
     async def handle(self, broker: 'MQTTBroker', client: 'ClientConnection') -> None:
         """Handle SUBSCRIBE packet."""
         import logging
-        from ..broker.topics import topic_matches_filter
+        from ..protocol.topic_utils import TopicUtils
         logger = logging.getLogger(__name__)
         
         return_codes = []
@@ -38,7 +38,7 @@ class SubscribePacket(Packet):
             
             # Send retained messages for new subscription
             retained = broker.topic_manager.get_matching_retained_messages(
-                topic_filter, topic_matches_filter
+                topic_filter, TopicUtils.topic_matches_filter
             )
             for msg in retained:
                 # Use minimum of message QoS and granted QoS

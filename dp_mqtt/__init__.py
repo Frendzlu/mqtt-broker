@@ -13,8 +13,8 @@ from .packets import (
     SubackPacket, UnsubscribePacket, UnsubackPacket,
     PubackPacket, PubrecPacket, PubrelPacket, PubcompPacket, PingrespPacket,
 )
-from .broker.session import Session, SessionManager, WillMessage
-from .broker.topics import TopicManager, RetainedMessage
+from .session import Session, SessionManager, WillMessage, PendingMessage
+from .topics import TopicManager, RetainedMessage
 
 # Helper function for topic matching
 def topic_matches_filter(topic: str, filter_pattern: str) -> bool:
@@ -58,6 +58,7 @@ __all__ = [
     "Session",
     "SessionManager",
     "WillMessage",
+    "PendingMessage",
     # Topics
     "TopicManager",
     "RetainedMessage",

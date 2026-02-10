@@ -3,6 +3,7 @@ from typing import Dict, Optional, Set
 
 from .pending_message import PendingMessage
 
+
 @dataclass
 class Session:
     """

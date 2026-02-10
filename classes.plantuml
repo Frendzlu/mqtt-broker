@@ -1,6 +1,6 @@
 @startuml classes
 set namespaceSeparator none
-class "AuthManager" as dp_mqtt.auth.AuthManager {
+class "AuthManager" as dp_mqtt.auth.auth_manager.AuthManager {
   allow_anonymous : bool
   broker_config
   config_path : Path
@@ -9,12 +9,12 @@ class "AuthManager" as dp_mqtt.auth.AuthManager {
   generate_password_hash(password: str) -> str
   is_authorized(username: Optional[str], topic: str, access_type: str) -> bool
 }
-class "BrokerConfig" as dp_mqtt.auth.BrokerConfig {
+class "BrokerConfig" as dp_mqtt.broker.broker_config.BrokerConfig {
   host : str
   max_qos : int
   port : int
 }
-class "Client" as dp_mqtt.client.Client {
+class "Client" as dp_mqtt.client.client_impl.Client {
   config
   is_connected : bool
   on_connect : Optional[Callable[['Client', int], None]]
@@ -34,7 +34,7 @@ class "Client" as dp_mqtt.client.Client {
   username_pw_set(username: str, password: Optional[str]) -> None
   will_set(topic: str, payload: Union[str, bytes], qos: int, retain: bool) -> None
 }
-class "ClientConnection" as dp_mqtt.broker.ClientConnection {
+class "ClientConnection" as dp_mqtt.broker.client_connection.ClientConnection {
   address : str
   clean_session : bool
   client_id : Optional[str]
@@ -46,7 +46,7 @@ class "ClientConnection" as dp_mqtt.broker.ClientConnection {
   will_message : Optional[WillMessage]
   writer : StreamWriter
 }
-class "Codec" as dp_mqtt.protocol.Codec {
+class "Codec" as dp_mqtt.protocol.codec.Codec {
   decode_binary(data: bytes, offset: int) -> Tuple[bytes, int]
   decode_remaining_length(data: bytes, offset: int) -> Tuple[int, int]
   decode_string(data: bytes, offset: int) -> Tuple[str, int]
@@ -58,12 +58,12 @@ class "Codec" as dp_mqtt.protocol.Codec {
   validate_packet_flags(packet_type: PacketType, flags: int) -> None
   validate_topic_filter(topic_filter: str) -> None
 }
-class "ConnackPacket" as dp_mqtt.protocol.ConnackPacket {
+class "ConnackPacket" as dp_mqtt.packets.connack_packet.ConnackPacket {
   return_code
   session_present : bool
   to_bytes() -> bytes
 }
-class "ConnectFlags" as dp_mqtt.protocol.ConnectFlags {
+class "ConnectFlags" as dp_mqtt.protocol.connect_flags.ConnectFlags {
   clean_session : bool
   password_flag : bool
   username_flag : bool
@@ -71,7 +71,7 @@ class "ConnectFlags" as dp_mqtt.protocol.ConnectFlags {
   will_qos : int
   will_retain : bool
 }
-class "ConnectPacket" as dp_mqtt.protocol.ConnectPacket {
+class "ConnectPacket" as dp_mqtt.packets.connect_packet.ConnectPacket {
   client_id : str
   flags
   keep_alive : int
@@ -83,16 +83,16 @@ class "ConnectPacket" as dp_mqtt.protocol.ConnectPacket {
   will_topic : Optional[str]
   from_bytes(data: bytes) -> 'ConnectPacket'
 }
-class "ConnectReturnCode" as dp_mqtt.protocol.ConnectReturnCode {
+class "ConnectReturnCode" as dp_mqtt.protocol.connect_return_code.ConnectReturnCode {
   name
 }
-class "<color:red>ConnectionError</color>" as dp_mqtt.client.ConnectionError {
+class "<color:red>ConnectionError</color>" as dp_mqtt.client.errors.ConnectionError {
 }
-class "DisconnectPacket" as dp_mqtt.protocol.DisconnectPacket {
+class "DisconnectPacket" as dp_mqtt.packets.disconnect_packet.DisconnectPacket {
   from_bytes(data: bytes) -> 'DisconnectPacket'
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
 }
-class "MQTT3_1PacketFactory" as dp_mqtt.MQTT3_1PacketFactory.MQTT3_1PacketFactory {
+class "MQTT3_1PacketFactory" as dp_mqtt.packets.MQTT3_1PacketFactory.MQTT3_1PacketFactory {
   construct_packet(packet_type: PacketType, flags: int, payload: bytes) -> Optional[Packet]
 }
 class "MQTTBroker" as dp_mqtt.broker.MQTTBroker {
@@ -110,7 +110,7 @@ class "MQTTBroker" as dp_mqtt.broker.MQTTBroker {
   start() -> None
   stop() -> None
 }
-class "MQTTClientConfig" as dp_mqtt.client.MQTTClientConfig {
+class "MQTTClientConfig" as dp_mqtt.client.config.MQTTClientConfig {
   clean_session : bool
   client_id : str
   keep_alive : int
@@ -121,9 +121,9 @@ class "MQTTClientConfig" as dp_mqtt.client.MQTTClientConfig {
   will_retain : bool
   will_topic : Optional[str]
 }
-class "<color:red>MQTTError</color>" as dp_mqtt.client.MQTTError {
+class "<color:red>MQTTError</color>" as dp_mqtt.client.errors.MQTTError {
 }
-class "MQTTMessage" as dp_mqtt.client.MQTTMessage {
+class "MQTTMessage" as dp_mqtt.client.message.MQTTMessage {
   mid : int
   payload : bytes
   payload_str : str
@@ -133,15 +133,15 @@ class "MQTTMessage" as dp_mqtt.client.MQTTMessage {
   timestamp_str : str
   topic : str
 }
-class "MQTTPacketFactory" as dp_mqtt.MQTTPacketFactory.MQTTPacketFactory {
+class "MQTTPacketFactory" as dp_mqtt.packets.MQTTPacketFactory.MQTTPacketFactory {
   {abstract}construct_packet(packet_type: PacketType, flags: int, payload: bytes) -> Optional[Packet]
 }
-class "<color:red>MalformedPacketError</color>" as dp_mqtt.protocol.MalformedPacketError {
+class "<color:red>MalformedPacketError</color>" as dp_mqtt.protocol.malformed_packet_error.MalformedPacketError {
 }
-class "Packet" as dp_mqtt.protocol.Packet {
+class "Packet" as dp_mqtt.packets.packet.Packet {
   {abstract}handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
 }
-class "PacketType" as dp_mqtt.protocol.PacketType {
+class "PacketType" as dp_mqtt.protocol.packet_type.PacketType {
   name
 }
 class "PendingMessage" as dp_mqtt.session.PendingMessage {
@@ -154,28 +154,38 @@ class "PendingMessage" as dp_mqtt.session.PendingMessage {
   timestamp : float
   topic : str
 }
-class "PingreqPacket" as dp_mqtt.protocol.PingreqPacket {
+class "PendingMessage" as dp_mqtt.broker.session.pending_message.PendingMessage {
+  packet_id : int
+  payload : bytes
+  qos : int
+  retain : bool
+  retry_count : int
+  state : str
+  timestamp : float
+  topic : str
+}
+class "PingreqPacket" as dp_mqtt.packets.pingreq_packet.PingreqPacket {
   from_bytes(data: bytes) -> 'PingreqPacket'
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
 }
-class "PingrespPacket" as dp_mqtt.protocol.PingrespPacket {
+class "PingrespPacket" as dp_mqtt.packets.pingresp_packet.PingrespPacket {
   to_bytes() -> bytes
 }
-class "<color:red>ProtocolError</color>" as dp_mqtt.protocol.ProtocolError {
+class "<color:red>ProtocolError</color>" as dp_mqtt.protocol.protocol_error.ProtocolError {
 }
-class "PubackPacket" as dp_mqtt.protocol.PubackPacket {
+class "PubackPacket" as dp_mqtt.packets.puback_packet.PubackPacket {
   packet_id : int
   from_bytes(data: bytes) -> 'PubackPacket'
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
   to_bytes() -> bytes
 }
-class "PubcompPacket" as dp_mqtt.protocol.PubcompPacket {
+class "PubcompPacket" as dp_mqtt.packets.pubcomp_packet.PubcompPacket {
   packet_id : int
   from_bytes(data: bytes) -> 'PubcompPacket'
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
   to_bytes() -> bytes
 }
-class "PublishPacket" as dp_mqtt.protocol.PublishPacket {
+class "PublishPacket" as dp_mqtt.packets.publish_packet.PublishPacket {
   dup : bool
   flags_byte : int
   packet_id : Optional[int]
@@ -187,22 +197,28 @@ class "PublishPacket" as dp_mqtt.protocol.PublishPacket {
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
   to_bytes() -> bytes
 }
-class "PubrecPacket" as dp_mqtt.protocol.PubrecPacket {
+class "PubrecPacket" as dp_mqtt.packets.pubrec_packet.PubrecPacket {
   packet_id : int
   from_bytes(data: bytes) -> 'PubrecPacket'
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
   to_bytes() -> bytes
 }
-class "PubrelPacket" as dp_mqtt.protocol.PubrelPacket {
+class "PubrelPacket" as dp_mqtt.packets.pubrel_packet.PubrelPacket {
   packet_id : int
   from_bytes(data: bytes) -> 'PubrelPacket'
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
   to_bytes() -> bytes
 }
-class "QoSLevel" as dp_mqtt.session.QoSLevel {
+class "QoSLevel" as dp_mqtt.protocol.qos_level.QoSLevel {
   name
 }
 class "RetainedMessage" as dp_mqtt.topics.RetainedMessage {
+  payload : bytes
+  qos : int
+  timestamp : float
+  topic : str
+}
+class "RetainedMessage" as dp_mqtt.broker.topics.retained_message.RetainedMessage {
   payload : bytes
   qos : int
   timestamp : float
@@ -220,18 +236,36 @@ class "Session" as dp_mqtt.session.Session {
   get_next_packet_id() -> int
   remove_subscription(topic_filter: str) -> bool
 }
+class "Session" as dp_mqtt.broker.session.session.Session {
+  client_id : str
+  next_packet_id : int
+  pending_incoming_qos2 : Set[int]
+  pending_outgoing : Dict[int, PendingMessage]
+  subscriptions : Dict[str, int]
+  add_subscription(topic_filter: str, qos: int) -> None
+  clear() -> None
+  get_matching_qos(topic: str, topic_matches_filter) -> Optional[int]
+  get_next_packet_id() -> int
+  remove_subscription(topic_filter: str) -> bool
+}
 class "SessionManager" as dp_mqtt.session.SessionManager {
+  sessions : Dict[str, Session]
+  get_or_create_session(client_id: str, clean_session: bool) -> tuple[Session, bool]
+  has_session(client_id: str) -> bool
+  remove_session(client_id: str) -> None
+}
+class "SessionManager" as dp_mqtt.broker.session.session_mananger.SessionManager {
   sessions : Dict[str, Session]
   get_or_create_session(client_id: str, clean_session: bool) -> Tuple[Session, bool]
   has_session(client_id: str) -> bool
   remove_session(client_id: str) -> None
 }
-class "SubackPacket" as dp_mqtt.protocol.SubackPacket {
+class "SubackPacket" as dp_mqtt.packets.suback_packet.SubackPacket {
   packet_id : int
   return_codes : List[int]
   to_bytes() -> bytes
 }
-class "SubscribePacket" as dp_mqtt.protocol.SubscribePacket {
+class "SubscribePacket" as dp_mqtt.packets.subscribe_packet.SubscribePacket {
   packet_id : int
   topics : List[Tuple[str, int]]
   from_bytes(data: bytes) -> 'SubscribePacket'
@@ -244,17 +278,29 @@ class "TopicManager" as dp_mqtt.topics.TopicManager {
   get_retained_message(topic: str) -> Optional[RetainedMessage]
   set_retained_message(topic: str, payload: bytes, qos: int) -> None
 }
-class "UnsubackPacket" as dp_mqtt.protocol.UnsubackPacket {
+class "TopicManager" as dp_mqtt.broker.topics.topic_manager.TopicManager {
+  retained_messages : Dict[str, RetainedMessage]
+  clear_retained_message(topic: str) -> None
+  get_matching_retained_messages(topic_filter: str, topic_matches_filter) -> List[RetainedMessage]
+  get_retained_message(topic: str) -> Optional[RetainedMessage]
+  set_retained_message(topic: str, payload: bytes, qos: int) -> None
+}
+class "TopicUtils" as dp_mqtt.protocol.topic_utils.TopicUtils {
+  topic_matches_filter(topic: str, filter_pattern: str) -> bool
+  validate_topic_filter(topic_filter: str) -> bool
+  validate_topic_name(topic: str) -> bool
+}
+class "UnsubackPacket" as dp_mqtt.packets.unsuback_packet.UnsubackPacket {
   packet_id : int
   to_bytes() -> bytes
 }
-class "UnsubscribePacket" as dp_mqtt.protocol.UnsubscribePacket {
+class "UnsubscribePacket" as dp_mqtt.packets.unsubscribe_packet.UnsubscribePacket {
   packet_id : int
   topics : List[str]
   from_bytes(data: bytes) -> 'UnsubscribePacket'
   handle(broker: 'MQTTBroker', client: 'ClientConnection') -> None
 }
-class "User" as dp_mqtt.auth.User {
+class "User" as dp_mqtt.auth.user.User {
   allowed_topics : Optional[List[str]]
   password_hash : str
   username : str
@@ -265,28 +311,36 @@ class "WillMessage" as dp_mqtt.session.WillMessage {
   retain : bool
   topic : str
 }
-dp_mqtt.MQTT3_1PacketFactory.MQTT3_1PacketFactory --|> dp_mqtt.MQTTPacketFactory.MQTTPacketFactory
-dp_mqtt.client.ConnectionError --|> dp_mqtt.client.MQTTError
-dp_mqtt.protocol.DisconnectPacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.protocol.MalformedPacketError --|> dp_mqtt.protocol.ProtocolError
-dp_mqtt.protocol.PingreqPacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.protocol.PubackPacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.protocol.PubcompPacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.protocol.PublishPacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.protocol.PubrecPacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.protocol.PubrelPacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.protocol.SubscribePacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.protocol.UnsubscribePacket --|> dp_mqtt.protocol.Packet
-dp_mqtt.auth.AuthManager --> dp_mqtt.auth.User : users
-dp_mqtt.broker.MQTTBroker --> dp_mqtt.broker.ClientConnection : clients
-dp_mqtt.protocol.ConnectPacket --> dp_mqtt.protocol.ConnectFlags : flags
-dp_mqtt.protocol.ConnackPacket --> dp_mqtt.protocol.ConnectReturnCode : return_code
+class "WillMessage" as dp_mqtt.broker.session.will_message.WillMessage {
+  payload : bytes
+  qos : int
+  retain : bool
+  topic : str
+}
+dp_mqtt.client.errors.ConnectionError --|> dp_mqtt.client.errors.MQTTError
+dp_mqtt.packets.MQTT3_1PacketFactory.MQTT3_1PacketFactory --|> dp_mqtt.packets.MQTTPacketFactory.MQTTPacketFactory
+dp_mqtt.packets.disconnect_packet.DisconnectPacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.packets.pingreq_packet.PingreqPacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.packets.puback_packet.PubackPacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.packets.pubcomp_packet.PubcompPacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.packets.publish_packet.PublishPacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.packets.pubrec_packet.PubrecPacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.packets.pubrel_packet.PubrelPacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.packets.subscribe_packet.SubscribePacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.packets.unsubscribe_packet.UnsubscribePacket --|> dp_mqtt.packets.packet.Packet
+dp_mqtt.protocol.malformed_packet_error.MalformedPacketError --|> dp_mqtt.protocol.protocol_error.ProtocolError
+dp_mqtt.auth.auth_manager.AuthManager --> dp_mqtt.auth.user.User : users
+dp_mqtt.broker.MQTTBroker --> dp_mqtt.broker.client_connection.ClientConnection : clients
+dp_mqtt.broker.session.session_mananger.SessionManager --> dp_mqtt.broker.session.session.Session : sessions
+dp_mqtt.broker.topics.topic_manager.TopicManager --> dp_mqtt.broker.topics.retained_message.RetainedMessage : retained_messages
+dp_mqtt.packets.connect_packet.ConnectPacket --> dp_mqtt.protocol.connect_flags.ConnectFlags : flags
+dp_mqtt.packets.connack_packet.ConnackPacket --> dp_mqtt.protocol.connect_return_code.ConnectReturnCode : return_code
 dp_mqtt.session.SessionManager --> dp_mqtt.session.Session : sessions
 dp_mqtt.topics.TopicManager --> dp_mqtt.topics.RetainedMessage : retained_messages
-dp_mqtt.MQTT3_1PacketFactory.MQTT3_1PacketFactory --* dp_mqtt.broker.MQTTBroker : factory
-dp_mqtt.auth.AuthManager --* dp_mqtt.broker.MQTTBroker : auth_manager
-dp_mqtt.auth.BrokerConfig --* dp_mqtt.auth.AuthManager : broker_config
-dp_mqtt.client.MQTTClientConfig --* dp_mqtt.client.Client : config
+dp_mqtt.auth.auth_manager.AuthManager --* dp_mqtt.broker.MQTTBroker : auth_manager
+dp_mqtt.broker.broker_config.BrokerConfig --* dp_mqtt.auth.auth_manager.AuthManager : broker_config
+dp_mqtt.client.config.MQTTClientConfig --* dp_mqtt.client.client_impl.Client : config
+dp_mqtt.packets.MQTT3_1PacketFactory.MQTT3_1PacketFactory --* dp_mqtt.broker.MQTTBroker : factory
 dp_mqtt.session.SessionManager --* dp_mqtt.broker.MQTTBroker : session_manager
 dp_mqtt.topics.TopicManager --* dp_mqtt.broker.MQTTBroker : topic_manager
 @enduml

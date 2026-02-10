@@ -5,9 +5,12 @@ Main server handling client connections and message routing.
 
 import asyncio
 import logging
+from pathlib import Path
 import time
 from typing import Dict, Optional, Set
 from dataclasses import dataclass
+
+from .broker_config import BrokerConfig
 
 from .client_connection import ClientConnection
 from ..protocol.topic_utils import TopicUtils
@@ -39,12 +42,19 @@ class MQTTBroker:
     """
     
     def __init__(self, host: str = "0.0.0.0", port: int = 1883, max_qos: int = 2, config_path: Optional[str] = None):
+
+        if config_path is None:
+            config_path = "config.yaml"
+        
+        self.config_path = Path(config_path)
+
+        broker_config = BrokerConfig.from_config_file(self.config_path)
         self.auth_manager = AuthManager(config_path)
         
         # Use config values if provided, otherwise use parameters
-        self.host = self.auth_manager.broker_config.host if config_path else host
-        self.port = self.auth_manager.broker_config.port if config_path else port
-        self.max_qos = self.auth_manager.broker_config.max_qos if config_path else max_qos
+        self.host = broker_config.host if config_path else host
+        self.port = broker_config.port if config_path else port
+        self.max_qos = broker_config.max_qos if config_path else max_qos
         
         self.session_manager = SessionManager()
         self.topic_manager = TopicManager()

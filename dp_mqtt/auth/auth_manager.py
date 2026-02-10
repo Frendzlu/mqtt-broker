@@ -5,7 +5,6 @@ from typing import Dict, Optional
 import yaml
 
 from ..auth.user import User
-from ..broker.broker_config import BrokerConfig
 
 import logging
 
@@ -24,7 +23,6 @@ class AuthManager:
         """
         self.users: Dict[str, User] = {}
         self.allow_anonymous = True
-        self.broker_config = BrokerConfig()
         
         if config_path is None:
             config_path = "config.yaml"
@@ -45,14 +43,6 @@ class AuthManager:
             if not config:
                 logger.warning("Empty config file. Using default settings.")
                 return
-            
-            # Load broker settings
-            broker_settings = config.get('broker', {})
-            self.broker_config = BrokerConfig(
-                host=broker_settings.get('host', '0.0.0.0'),
-                port=broker_settings.get('port', 1883),
-                max_qos=broker_settings.get('max_qos', 2)
-            )
             
             # Load authentication settings
             auth_config = config.get('authentication', {})

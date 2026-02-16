@@ -340,8 +340,11 @@ class MQTTBroker:
     
     async def _forward_publish(self, topic: str, payload: bytes, qos: int, retain: bool) -> None:
         """Forward a published message to all matching subscribers."""
+        logger.debug(f"Forwarding message: topic={topic}, qos={qos}, subscribers={len(self.clients)}")
+        
         for client_id, client in list(self.clients.items()):
             if not client.connected or not client.session:
+                logger.debug(f"Skipping {client_id}: connected={client.connected}, has_session={client.session is not None}")
                 continue
             
             # Check if any subscription matches
@@ -349,9 +352,12 @@ class MQTTBroker:
             if matching_qos is not None:
                 # Use minimum of publish QoS and subscription QoS
                 effective_qos = min(qos, matching_qos)
+                logger.debug(f"Forwarding to {client_id}: effective_qos={effective_qos}")
                 await self._send_publish(
                     client, topic, payload, effective_qos, retain=False
                 )
+            else:
+                logger.debug(f"No matching subscription for {client_id} on topic {topic}")
     
     async def _send_publish(self, client: ClientConnection, topic: str, payload: bytes,
                            qos: int, retain: bool = False, dup: bool = False,

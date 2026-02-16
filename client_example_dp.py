@@ -15,10 +15,11 @@ from dp_mqtt import Client, MQTTMessage
 
 async def main():
     # Create client
-    client = Client(client_id="dp-mqtt-demo-client", clean_session=True)
-    
+    client_pub = Client(client_id="dp-mqtt-demo-client-pub", clean_session=True)
+    client_sub = Client(client_id="dp-mqtt-demo-client-sub", clean_session=True)
     # Set authentication (must match credentials in config.yaml)
-    client.username_pw_set("admin", "admin")
+    client_pub.username_pw_set("admin", "admin")
+    client_sub.username_pw_set("admin", "admin")
     
     # Message counter
     message_count = [0]
@@ -41,40 +42,54 @@ async def main():
         print(f"Message {mid} published")
     
     # Assign callbacks
-    client.on_connect = on_connect
-    client.on_message = on_message
-    client.on_subscribe = on_subscribe
-    client.on_publish = on_publish
+    client_pub.on_connect = on_connect
+    client_pub.on_message = on_message
+    client_pub.on_subscribe = on_subscribe
+    client_pub.on_publish = on_publish
+    client_sub.on_connect = on_connect
+    client_sub.on_message = on_message
+    client_sub.on_subscribe = on_subscribe
+    client_sub.on_publish = on_publish
     
     try:
         # Connect to broker
         print("Connecting to MQTT broker...")
-        rc = await client.connect("localhost", 1883, keepalive=60)
+        rc = await client_pub.connect("localhost", 1883, keepalive=60)
+        rc_sub = await client_sub.connect("localhost", 1883, keepalive=60)
         
-        if rc != 0:
-            print(f"Failed to connect. Error code: {rc}")
+        if rc != 0 or rc_sub != 0:
+            print(f"Failed to connect. Error code: {rc}, {rc_sub}")
             return
+        
+        # Start network loops to receive messages
+        await client_pub.loop_start()
+        await client_sub.loop_start()
         
         # Subscribe to topics
         print("\nSubscribing to topics...")
-        await client.subscribe([
+        await client_sub.subscribe([
             ("test/#", 1),
             ("sensor/+/data", 0),
         ])
         
         # Publish some messages
         print("\nPublishing messages...")
-        await client.publish("test/message", "Hello from dp_mqtt!", qos=1)
-        await client.publish("sensor/temp/data", "22.5", qos=0)
-        await client.publish("sensor/humidity/data", "65", qos=1)
-        
+        await client_pub.publish("test/message", "Hello from dp_mqtt!", qos=1)
+        await client_pub.publish("sensor/temp/data", "22.5", qos=0)
+        await client_pub.publish("sensor/humidity/data", "65", qos=1)
+
         # Wait for messages
-        print("\nListening for messages (5 seconds)...")
-        await asyncio.sleep(20)
+        print("\nListening for messages...")
+        await asyncio.sleep(5)
+        
+        # Stop network loops
+        await client_pub.loop_stop()
+        await client_sub.loop_stop()
         
         # Disconnect
         print("\nDisconnecting...")
-        await client.disconnect()
+        await client_pub.disconnect()
+        await client_sub.disconnect()
         print("Disconnected")
         
     except Exception as e:

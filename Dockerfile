@@ -23,4 +23,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 1883
 
 # Run the broker
-CMD python -u -m dp_mqtt --config $CONFIG_PATH
+CMD python -u -m dp_mqtt --config $CONFIG_PATH --debug

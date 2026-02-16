@@ -16,7 +16,7 @@ import time
 
 # Configuration
 BROKER_HOST = "localhost"
-BROKER_PORT = 1885
+BROKER_PORT = 1883
 USERNAME = "admin"
 PASSWORD = "admin"
 
@@ -97,7 +97,7 @@ def main():
         print("\nPublishing messages...")
         client.publish("test/message", "Hello from paho-mqtt!", qos=1)
         client.publish("sensor/temp/data", "23.0", qos=0)
-        client.publish("sensor/humidity/data", "68", qos=1)
+        client.publish("sensor/humidity/data", "68", qos=2)  # Will be downgraded to broker's max_qos
         
         # Wait for messages
         print("\nListening for messages (5 seconds)...")

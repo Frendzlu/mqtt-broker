@@ -1,11 +1,11 @@
-from codecs import Codec
 from dataclasses import dataclass
 import struct
 from typing import Optional
 
-from ..protocol.connect_flags import ConnectFlags
-from ..protocol.malformed_packet_error import MalformedPacketError
-from ..protocol.protocol_error import ProtocolError
+from dp_mqtt.protocol.connect_flags import ConnectFlags
+from dp_mqtt.protocol.malformed_packet_error import MalformedPacketError
+from dp_mqtt.protocol.protocol_error import ProtocolError
+from dp_mqtt.protocol import Codec
 
 
 @dataclass

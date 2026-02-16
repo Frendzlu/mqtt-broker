@@ -6,21 +6,21 @@ authentication:
   users:
     - username: admin
       password: sha256:8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
-      # Password: admin
+      # password: admin
     
     - username: iot_device
       password: sha256:5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8
-      # Password: password
+      # password: password
     
     - username: publisher
       password: sha256:8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
-      # Password: publisher123
+      # password: publisher123
     
     - username: subscriber
       password: sha256:0b14d501a594442a01c6859541bcb3e8164d183d32937b851835442f69d5c94e
-      # Password: subscriber456
+      # password: subscriber456
 
 broker:
   port: 1883  # IMPORTANT: If you change this, also update MQTT_PORT in .env file!
   host: 0.0.0.0
-  max_qos: 2
+  max_qos: 1

@@ -16,8 +16,11 @@ RUN mkdir -p /config
 # Set default config path
 ENV CONFIG_PATH=/config/config.yaml
 
+# Disable Python output buffering for Docker logs
+ENV PYTHONUNBUFFERED=1
+
 # Expose MQTT port
 EXPOSE 1883
 
 # Run the broker
-CMD python -m dp_mqtt --config $CONFIG_PATH
+CMD python -u -m dp_mqtt --config $CONFIG_PATH --debug

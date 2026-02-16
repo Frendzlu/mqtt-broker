@@ -34,13 +34,18 @@ class PublishPacket(Packet):
         
         logger.debug(f"PUBLISH from {client.client_id}: topic={self.topic}, qos={self.qos}, retain={self.retain}")
         
-        # Handle retained message
+        # Downgrade QoS for forwarding if it exceeds broker's max_qos
+        forward_qos = min(self.qos, broker.max_qos)
+        if self.qos > broker.max_qos:
+            logger.debug(f"Will forward at QoS {forward_qos} instead of {self.qos} (max_qos={broker.max_qos})")
+        
+        # Handle retained message (use downgraded QoS)
         if self.retain:
             broker.topic_manager.set_retained_message(
-                self.topic, self.payload, self.qos
+                self.topic, self.payload, forward_qos
             )
         
-        # Send acknowledgment based on QoS
+        # Send acknowledgment based on original QoS (must respond properly to client)
         if self.qos == 1:
             # packet_id is always present for QoS > 0
             assert self.packet_id is not None
@@ -49,13 +54,23 @@ class PublishPacket(Packet):
             # packet_id is always present for QoS > 0
             assert self.packet_id is not None
             assert client.session is not None
-            # Store for duplicate detection
+            
+            # Check for duplicate
+            if self.packet_id in client.session.pending_incoming_qos2:
+                # Duplicate PUBLISH - just send PUBREC again, don't forward
+                await broker._send_packet(client, PubrecPacket(self.packet_id).to_bytes())
+                logger.debug(f"Duplicate QoS 2 PUBLISH packet {self.packet_id}, resending PUBREC")
+                return
+            
+            # New QoS 2 message - store for duplicate detection and send PUBREC
             client.session.pending_incoming_qos2.add(self.packet_id)
             await broker._send_packet(client, PubrecPacket(self.packet_id).to_bytes())
-            return  # Don't forward yet, wait for PUBREL
+            # Note: We forward the message now, not waiting for PUBREL
+            # PUBREL just completes the handshake
         
-        # Forward to subscribers (QoS 0 and 1, or after PUBREL for QoS 2)
-        await broker._forward_publish(self.topic, self.payload, self.qos, self.retain)
+        # Forward to subscribers (all QoS levels)
+        # Use downgraded QoS for forwarding
+        await broker._forward_publish(self.topic, self.payload, forward_qos, self.retain)
 
     @classmethod
     def from_bytes(cls, flags: int, data: bytes) -> "PublishPacket":

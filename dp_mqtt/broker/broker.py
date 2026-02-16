@@ -51,10 +51,10 @@ class MQTTBroker:
         broker_config = BrokerConfig.from_config_file(self.config_path)
         self.auth_manager = AuthManager(config_path)
         
-        # Use config values if provided, otherwise use parameters
-        self.host = broker_config.host if config_path else host
-        self.port = broker_config.port if config_path else port
-        self.max_qos = broker_config.max_qos if config_path else max_qos
+        # Use config values from file (already loaded with defaults if file missing)
+        self.host = broker_config.host
+        self.port = broker_config.port
+        self.max_qos = broker_config.max_qos
         
         self.session_manager = SessionManager()
         self.topic_manager = TopicManager()
@@ -279,10 +279,16 @@ class MQTTBroker:
             # When will_flag is True, will_topic and will_message are guaranteed to be present
             assert connect.will_topic is not None
             assert connect.will_message is not None
+            
+            # Downgrade will QoS if it exceeds broker's max_qos
+            will_qos = min(connect.flags.will_qos, self.max_qos)
+            if connect.flags.will_qos > self.max_qos:
+                logger.info(f"Client {client_id} Will QoS downgraded from {connect.flags.will_qos} to {will_qos}")
+            
             client.will_message = WillMessage(
                 topic=connect.will_topic,
                 payload=connect.will_message,
-                qos=connect.flags.will_qos,
+                qos=will_qos,
                 retain=connect.flags.will_retain
             )
         

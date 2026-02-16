@@ -13,6 +13,7 @@ services:
       - ./logs:/app/logs
     environment:
       - CONFIG_PATH=/config/config.yaml
+      - PYTHONUNBUFFERED=1
     restart: unless-stopped
     networks:
       - mqtt-network
